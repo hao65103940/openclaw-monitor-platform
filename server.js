@@ -651,6 +651,118 @@ app.put('/api/file/save', (req, res) => {
 });
 
 /**
+ * GET /api/logs/list
+ * 获取可用的日志文件列表
+ */
+app.get('/api/logs/list', (req, res) => {
+  try {
+    const logsPath = '/root/.openclaw/monitor-platform/logs';
+    const logs = [];
+    
+    // 扫描 logs 目录
+    if (fs.existsSync(logsPath)) {
+      const files = fs.readdirSync(logsPath)
+        .filter(f => f.endsWith('.log'))
+        .map(f => {
+          const stat = fs.statSync(path.join(logsPath, f));
+          return {
+            name: f,
+            path: path.join(logsPath, f),
+            size: stat.size,
+            modified: stat.mtime,
+          };
+        });
+      logs.push(...files);
+    }
+    
+    // 添加 server.log（主日志）
+    const serverLogPath = '/root/.openclaw/monitor-platform/logs/server.log';
+    if (fs.existsSync(serverLogPath)) {
+      const stat = fs.statSync(serverLogPath);
+      logs.push({
+        name: 'server.log',
+        path: serverLogPath,
+        size: stat.size,
+        modified: stat.mtime,
+        label: '后端服务日志',
+      });
+    }
+    
+    res.json({ logs });
+  } catch (error) {
+    console.error('[API] 获取日志列表失败:', error.message);
+    res.status(500).json({ 
+      error: '获取日志列表失败',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/logs/read
+ * 读取日志文件内容（支持分页和过滤）
+ * Query: { file, lines = 100, filter = '' }
+ */
+app.get('/api/logs/read', (req, res) => {
+  try {
+    const { file, lines = 100, filter = '' } = req.query;
+    
+    if (!file) {
+      return res.status(400).json({
+        error: '缺少 file 参数',
+      });
+    }
+    
+    // 安全限制：只能读取 logs 目录下的文件
+    const logsPath = '/root/.openclaw/monitor-platform/logs';
+    const filePath = path.join(logsPath, file);
+    
+    if (!filePath.startsWith(logsPath)) {
+      return res.status(403).json({
+        error: '禁止访问此路径',
+        path: filePath,
+      });
+    }
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        error: '日志文件不存在',
+        path: filePath,
+      });
+    }
+    
+    // 读取文件内容
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const allLines = content.split('\n');
+    
+    // 过滤（如果有关键词）
+    let filteredLines = allLines;
+    if (filter) {
+      filteredLines = allLines.filter(line => 
+        line.toLowerCase().includes(filter.toLowerCase())
+      );
+    }
+    
+    // 取最后 N 行
+    const recentLines = filteredLines.slice(-parseInt(lines));
+    
+    res.json({
+      success: true,
+      file: file,
+      lines: recentLines,
+      total: filteredLines.length,
+      hasMore: filteredLines.length > parseInt(lines),
+    });
+  } catch (error) {
+    console.error('[API] 读取日志失败:', error.message);
+    res.status(500).json({ 
+      error: '读取日志失败',
+      details: error.message,
+    });
+  }
+});
+
+/**
  * WebSocket 支持（Socket.io）
  * 注意：需要安装 socket.io 包
  * 当前版本不支持，前端会回退到轮询模式

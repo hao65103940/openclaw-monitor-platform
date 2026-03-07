@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import Trace from './pages/Trace';
 import Analytics from './pages/Analytics';
 import Configs from './pages/Configs';
+import Logs from './pages/Logs';
 import dayjs from 'dayjs';
 
 function Layout({ children }: { children: React.ReactNode }) {
@@ -35,8 +36,14 @@ function Layout({ children }: { children: React.ReactNode }) {
                 <Link to="/analytics" className="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition-colors">
                   📈 性能分析
                 </Link>
+                <Link to="/analytics" className="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition-colors">
+                  📈 性能分析
+                </Link>
                 <Link to="/configs" className="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition-colors">
                   ⚙️ 配置管理
+                </Link>
+                <Link to="/logs" className="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition-colors">
+                  📝 日志查看
                 </Link>
               </div>
             </div>
@@ -66,6 +73,7 @@ function App() {
           <Route path="/trace" element={<Trace />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/configs" element={<Configs />} />
+          <Route path="/logs" element={<Logs />} />
         </Routes>
       </Layout>
     </BrowserRouter>
