@@ -7,6 +7,12 @@
 import express from 'express';
 import cors from 'cors';
 import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3001;
@@ -84,6 +90,19 @@ function formatDuration(ms) {
   const minutes = Math.floor(ms / 60000);
   const seconds = Math.floor((ms % 60000) / 1000);
   return `${minutes}m ${seconds}s`;
+}
+
+/**
+ * 格式化 Agent 名称
+ */
+function formatAgentName(id) {
+  const names = {
+    'main': '主 Agent (夏娃 Eve ✨)',
+    'feishu-agent': '飞书助手 📝',
+    'wecom-agent': '企微助手 💼',
+  };
+  if (names[id]) return names[id];
+  return id.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') + ' 🤖';
 }
 
 /**
@@ -358,40 +377,67 @@ app.get('/api/sessions/:sessionId/history', (req, res) => {
 
 /**
  * GET /api/agents/config/list
- * 获取 Agent 配置列表
+ * 获取 Agent 配置列表（真实文件）
  */
 app.get('/api/agents/config/list', (req, res) => {
   try {
-    // 返回模拟的 Agent 配置列表（实际项目中可以从文件系统读取）
-    const agents = [
-      {
-        id: 'main',
-        name: '主 Agent',
-        path: '/root/.openclaw/workspace',
-        files: [
-          { name: 'SOUL.md', path: 'SOUL.md' },
-          { name: 'MEMORY.md', path: 'MEMORY.md' },
-          { name: 'USER.md', path: 'USER.md' },
-          { name: 'IDENTITY.md', path: 'IDENTITY.md' },
-        ],
-      },
-      {
-        id: 'feishu-agent',
-        name: '飞书助手',
-        path: '/root/.openclaw/workspace/agents/feishu',
-        files: [
-          { name: 'IDENTITY.md', path: 'IDENTITY.md' },
-        ],
-      },
-      {
-        id: 'wecom-agent',
-        name: '企微助手',
-        path: '/root/.openclaw/workspace/agents/wecom',
-        files: [
-          { name: 'IDENTITY.md', path: 'IDENTITY.md' },
-        ],
-      },
-    ];
+    const workspacePath = '/root/.openclaw/workspace';
+    const agents = [];
+    
+    // 主 Agent - 读取 workspace 根目录的配置文件
+    const mainFiles = [];
+    const mainConfigFiles = ['SOUL.md', 'MEMORY.md', 'USER.md', 'IDENTITY.md', 'AGENTS.md', 'TOOLS.md', 'HEARTBEAT.md'];
+    mainConfigFiles.forEach(file => {
+      const filePath = path.join(workspacePath, file);
+      if (fs.existsSync(filePath)) {
+        mainFiles.push({ name: file, path: file });
+      }
+    });
+    
+    // 读取 memory 目录
+    const memoryPath = path.join(workspacePath, 'memory');
+    if (fs.existsSync(memoryPath)) {
+      const memoryFiles = fs.readdirSync(memoryPath)
+        .filter(f => f.endsWith('.md'))
+        .slice(0, 10) // 最多 10 个
+        .map(f => ({ name: f, path: `memory/${f}` }));
+      mainFiles.push(...memoryFiles);
+    }
+    
+    agents.push({
+      id: 'main',
+      name: '主 Agent (夏娃 Eve ✨)',
+      path: workspacePath,
+      files: mainFiles,
+    });
+    
+    // 子 Agent - 读取 agents 目录
+    const agentsPath = path.join(workspacePath, 'agents');
+    if (fs.existsSync(agentsPath)) {
+      const agentDirs = fs.readdirSync(agentsPath).filter(f => {
+        const stat = fs.statSync(path.join(agentsPath, f));
+        return stat.isDirectory();
+      });
+      
+      agentDirs.forEach(agentDir => {
+        const agentFiles = [];
+        const agentFullPath = path.join(agentsPath, agentDir);
+        
+        // 读取每个 agent 目录下的 .md 文件
+        const files = fs.readdirSync(agentFullPath)
+          .filter(f => f.endsWith('.md'))
+          .map(f => ({ name: f, path: f }));
+        
+        agentFiles.push(...files);
+        
+        agents.push({
+          id: agentDir,
+          name: formatAgentName(agentDir),
+          path: agentFullPath,
+          files: agentFiles,
+        });
+      });
+    }
     
     res.json({ agents });
     console.log('[API] 返回 Agent 配置列表:', agents.length, '个');
@@ -406,18 +452,41 @@ app.get('/api/agents/config/list', (req, res) => {
 
 /**
  * GET /api/agents/config/:agentId/file/:fileName
- * 获取 Agent 配置文件内容
+ * 获取 Agent 配置文件内容（真实文件）
  */
 app.get('/api/agents/config/:agentId/file/:fileName', (req, res) => {
   try {
     const { agentId, fileName } = req.params;
-    console.log(`[API] 请求配置文件：${agentId}/${fileName}`);
+    const workspacePath = '/root/.openclaw/workspace';
     
-    // 返回模拟内容
+    // 构建文件路径
+    let filePath;
+    if (agentId === 'main') {
+      // 主 Agent - 直接在 workspace 根目录
+      filePath = path.join(workspacePath, fileName);
+    } else {
+      // 子 Agent - 在 agents 目录下
+      filePath = path.join(workspacePath, 'agents', agentId, fileName);
+    }
+    
+    console.log(`[API] 读取配置文件：${filePath}`);
+    
+    // 检查文件是否存在
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        error: '文件不存在',
+        path: filePath,
+      });
+    }
+    
+    // 读取文件内容
+    const content = fs.readFileSync(filePath, 'utf-8');
+    
     res.json({
       file: fileName,
-      content: `# ${fileName}\n\n配置文件内容（模拟）`,
-      agentId,
+      content: content,
+      agentId: agentId,
+      path: filePath,
     });
   } catch (error) {
     console.error('[API] 获取配置文件失败:', error.message);
@@ -430,19 +499,33 @@ app.get('/api/agents/config/:agentId/file/:fileName', (req, res) => {
 
 /**
  * POST /api/agents/config/:agentId/file/:fileName
- * 保存 Agent 配置文件
+ * 保存 Agent 配置文件（真实文件）
  */
 app.post('/api/agents/config/:agentId/file/:fileName', (req, res) => {
   try {
     const { agentId, fileName } = req.params;
     const { content } = req.body;
-    console.log(`[API] 保存配置文件：${agentId}/${fileName}`);
+    const workspacePath = '/root/.openclaw/workspace';
+    
+    // 构建文件路径
+    let filePath;
+    if (agentId === 'main') {
+      filePath = path.join(workspacePath, fileName);
+    } else {
+      filePath = path.join(workspacePath, 'agents', agentId, fileName);
+    }
+    
+    console.log(`[API] 保存配置文件：${filePath}`);
+    
+    // 写入文件
+    fs.writeFileSync(filePath, content, 'utf-8');
     
     res.json({
       success: true,
-      message: '配置已保存（模拟）',
+      message: '配置已保存',
       agentId,
       fileName,
+      path: filePath,
     });
   } catch (error) {
     console.error('[API] 保存配置文件失败:', error.message);
