@@ -136,13 +136,8 @@ export async function getSubagents(): Promise<SubagentsListResponse> {
     return response.data;
   } catch (error) {
     console.error('[API] getSubagents 失败:', error);
-    // 返回模拟数据（由 caller 决定是否停止）
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return {
-      total: mockData.active.length + mockData.recent.length,
-      active: mockData.active,
-      recent: mockData.recent,
-    };
+    // 抛出错误，让 caller 决定是否停止
+    throw error;
   }
 }
 
@@ -210,18 +205,8 @@ export async function getStats(): Promise<Stats> {
     return response.data;
   } catch (error) {
     console.error('[API] getStats 失败:', error);
-    // 返回模拟数据（由 caller 决定是否停止）
-    await new Promise(resolve => setTimeout(resolve, 200));
-    return {
-      totalAgents: 3,
-      activeAgents: 1,
-      completedAgents: 2,
-      failedAgents: 0,
-      totalTokens: 39476,
-      totalRuntime: 283000,
-      avgRuntime: 141500,
-      modelUsage: { 'qwen3.5-plus': 3 },
-    };
+    // 抛出错误，让 caller 决定是否停止
+    throw error;
   }
 }
 
