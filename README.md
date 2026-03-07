@@ -32,11 +32,24 @@ npm run dev
 
 ### 🔌 模式 2：真实数据
 
-**在服务器上访问：**
+**使用启动脚本（推荐）：**
 
 ```bash
-# 启动 API 服务
-node server-real.js &
+# 启动服务（前端 + 后端）
+./start.sh
+
+# 停止服务
+./stop.sh
+
+# 查看日志
+tail -f logs/server.log
+```
+
+**手动启动：**
+
+```bash
+# 启动后端 API 服务
+node server.js &
 
 # 启动前端
 npm run dev
@@ -46,13 +59,10 @@ npm run dev
 
 ```bash
 # 1. SSH 端口转发
-ssh -L 3001:localhost:3001 user@your-server
+ssh -L 3000:localhost:3000 -L 3001:localhost:3001 user@your-server
 
 # 2. 访问 http://localhost:3000
-# 3. 在页面上点击"切换到实时数据"按钮
 ```
-
-详细文档：[README-REAL-DATA.md](./README-REAL-DATA.md)
 
 ### 3. 构建生产版本
 
