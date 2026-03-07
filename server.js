@@ -310,6 +310,37 @@ app.get('/api/trace/subagents', (req, res) => {
   }
 });
 
+/**
+ * GET /api/sessions/:sessionId/history
+ * 获取会话历史日志
+ */
+app.get('/api/sessions/:sessionId/history', (req, res) => {
+  try {
+    const sessionId = req.params.sessionId;
+    console.log(`[API] 请求会话历史：${sessionId}`);
+    
+    // OpenClaw 不直接提供会话历史，返回空数组
+    // 前端会显示模拟日志
+    res.json({
+      history: [],
+      sessionId,
+      note: 'OpenClaw 不提供会话历史 API',
+    });
+  } catch (error) {
+    console.error('[API] 获取会话历史失败:', error.message);
+    res.status(500).json({ 
+      error: '获取数据失败',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * WebSocket 支持（Socket.io）
+ * 注意：需要安装 socket.io 包
+ * 当前版本不支持，前端会回退到轮询模式
+ */
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Agent 监控平台 API 服务已启动`);
   console.log(`📡 监听端口：http://0.0.0.0:${PORT}`);
