@@ -33,20 +33,22 @@ function StatCard({ title, value, icon, color, subtext }: {
 }
 
 function AgentStatusBadge({ status }: { status: string }) {
-  const statusConfig: Record<string, { color: string; bg: string; icon: string }> = {
-    running: { color: 'text-green-300', bg: 'bg-green-900/50', icon: '🟢' },
-    done: { color: 'text-blue-300', bg: 'bg-blue-900/50', icon: '✅' },
-    failed: { color: 'text-red-300', bg: 'bg-red-900/50', icon: '❌' },
-    pending: { color: 'text-yellow-300', bg: 'bg-yellow-900/50', icon: '🟡' },
+  const statusConfig: Record<string, { color: string; bg: string; icon: string; label: string }> = {
+    running: { color: 'text-green-400', bg: 'bg-green-900/30', icon: '🟢', label: '运行中' },
+    done: { color: 'text-blue-400', bg: 'bg-blue-900/30', icon: '✅', label: '已完成' },
+    failed: { color: 'text-red-400', bg: 'bg-red-900/30', icon: '❌', label: '失败' },
+    pending: { color: 'text-yellow-400', bg: 'bg-yellow-900/30', icon: '🟡', label: '等待中' },
   };
 
-  const config = statusConfig[status] || { color: 'text-gray-300', bg: 'bg-gray-900/50', icon: '⚪' };
+  const config = statusConfig[status] || { color: 'text-gray-400', bg: 'bg-gray-900/30', icon: '⚪', label: status };
 
   return (
-    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${config.bg} ${config.color} border border-${config.color.split('-')[1]}-700`}>
-      <span className="mr-1.5">{config.icon}</span>
-      {status === 'running' ? '运行中' : status === 'done' ? '已完成' : status === 'failed' ? '失败' : status}
-    </span>
+    <div className="flex items-center space-x-2">
+      <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-lg ${config.bg} ${config.color}`} title={config.label}>
+        {config.icon}
+      </span>
+      <span className="text-xs text-gray-400">{config.label}</span>
+    </div>
   );
 }
 
@@ -111,7 +113,17 @@ function AgentTable({ agents, title, emptyMessage, onViewLog }: {
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <AgentStatusBadge status={agent.status} />
+                  <div className="flex items-center space-x-3">
+                    <AgentStatusBadge status={agent.status} />
+                    {onViewLog && (
+                      <button
+                        onClick={() => onViewLog(agent)}
+                        className="px-3 py-1.5 text-xs bg-blue-700 hover:bg-blue-600 text-white rounded transition-colors whitespace-nowrap"
+                      >
+                        📋 查看
+                      </button>
+                    )}
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-300 font-mono">
                   {agent.runtime || '-'}
@@ -136,16 +148,6 @@ function AgentTable({ agents, title, emptyMessage, onViewLog }: {
                     '-'
                   )}
                 </td>
-                {onViewLog && (
-                  <td className="px-6 py-4 text-center">
-                    <button
-                      onClick={() => onViewLog(agent)}
-                      className="px-3 py-1 text-xs bg-blue-700 hover:bg-blue-600 text-white rounded transition-colors"
-                    >
-                      📋 查看
-                    </button>
-                  </td>
-                )}
               </tr>
             ))}
           </tbody>

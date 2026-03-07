@@ -633,17 +633,35 @@ function Trace() {
                   </div>
                   
                   <div className="mt-3 pt-3 border-t border-gray-700">
-                    <div className="text-xs text-gray-400 mb-2">涉及 Agent</div>
-                    <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
-                      {channel.agents.map((agentId, idx) => (
-                        <span 
-                          key={`${agentId}-${idx}`} 
-                          className="px-2 py-1 bg-gray-800 text-gray-300 text-xs rounded break-all hover:bg-gray-700 transition-colors cursor-default"
-                          title={agentId}
-                        >
-                          {agentId}
-                        </span>
-                      ))}
+                    <div className="text-xs text-gray-400 mb-2">绑定 Agent</div>
+                    <div className="space-y-2">
+                      {channel.agents.slice(0, 10).map((agentId, idx) => {
+                        // 提取 Agent 类型
+                        const agentType = agentId.includes('feishu') ? '📝' : 
+                                         agentId.includes('wecom') ? '💼' : 
+                                         agentId.includes('cron') ? '⏰' : '🤖';
+                        return (
+                          <div 
+                            key={`${agentId}-${idx}`}
+                            className="flex items-center justify-between px-2 py-1.5 bg-gray-800/50 rounded hover:bg-gray-700/50 transition-colors"
+                          >
+                            <div className="flex items-center space-x-2 min-w-0 flex-1">
+                              <span className="text-lg flex-shrink-0">{agentType}</span>
+                              <span className="text-xs text-gray-300 truncate" title={agentId}>
+                                {agentId}
+                              </span>
+                            </div>
+                            <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
+                              {agentId.split(':').pop()?.substring(0, 8)}...
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {channel.agents.length > 10 && (
+                        <div className="text-xs text-gray-500 text-center pt-2 border-t border-gray-700">
+                          还有 {channel.agents.length - 10} 个 Agent...
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
