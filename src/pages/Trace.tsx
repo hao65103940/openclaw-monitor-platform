@@ -53,6 +53,13 @@ function Trace() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedNode, setSelectedNode] = useState<TraceNode | null>(null);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+  
+  // 各模块加载状态 - 独立显示
+  const [loadingStates, setLoadingStates] = useState({
+    flow: true,
+    channels: true,
+    subagents: true,
+  });
 
   // 失败计数器 - 防止无限重试
   const failCountRef = React.useRef(0);
@@ -76,29 +83,76 @@ function Trace() {
     
     try {
       setRefreshing(true);
-      const [traceResponse, channelResponse, subAgentResponse] = await Promise.all([
-        api.get('/trace/flow'),
-        api.get('/analytics/channels'),
-        api.get('/trace/subagents'),
-      ]);
       
-      // 成功后重置失败计数
-      failCountRef.current = 0;
-      setApiStopped(false);
+      // 🔥 优化：并行加载所有数据，独立处理每个请求的成败
+      const promises = [
+        // 1. 执行流程数据
+        (async () => {
+          try {
+            const response = await api.get('/trace/flow');
+            setFlow(response.data.flow || []);
+            setLoadingStates(prev => ({ ...prev, flow: false }));
+          } catch (error) {
+            console.error('[Trace] 加载执行流程失败:', error);
+            setFlow([]);
+            setLoadingStates(prev => ({ ...prev, flow: false }));
+            throw error;
+          }
+        })(),
+        
+        // 2. 渠道统计数据
+        (async () => {
+          try {
+            const response = await api.get('/analytics/channels');
+            setChannelStats(response.data.channels || []);
+            setLoadingStates(prev => ({ ...prev, channels: false }));
+          } catch (error) {
+            console.error('[Trace] 加载渠道统计失败:', error);
+            setChannelStats([]);
+            setLoadingStates(prev => ({ ...prev, channels: false }));
+            throw error;
+          }
+        })(),
+        
+        // 3. 子 Agent 链路数据
+        (async () => {
+          try {
+            const response = await api.get('/trace/subagents');
+            setSubAgentLinks(response.data.subagents || []);
+            setLoadingStates(prev => ({ ...prev, subagents: false }));
+          } catch (error) {
+            console.error('[Trace] 加载子 Agent 链路失败:', error);
+            setSubAgentLinks([]);
+            setLoadingStates(prev => ({ ...prev, subagents: false }));
+            throw error;
+          }
+        })(),
+      ];
       
-      setFlow(traceResponse.data.flow || []);
-      setChannelStats(channelResponse.data.channels || []);
-      setSubAgentLinks(subAgentResponse.data.subagents || []);
-      setLoading(false);
-    } catch (error) {
-      failCountRef.current++;
-      console.error(`加载数据失败 (${failCountRef.current}/${MAX_FAIL_COUNT}):`, error);
+      // 等待所有请求完成（无论成败）
+      const results = await Promise.allSettled(promises);
       
-      if (failCountRef.current >= MAX_FAIL_COUNT) {
-        console.warn('连续失败 3 次，停止自动刷新');
+      // 统计失败次数
+      const failedCount = results.filter(r => r.status === 'rejected').length;
+      if (failedCount > 0) {
+        failCountRef.current += failedCount;
+        console.error(`[Trace] 本次加载失败 ${failedCount} 个接口 (累计 ${failCountRef.current}/${MAX_FAIL_COUNT * 3})`);
+      } else {
+        // 全部成功则重置计数
+        failCountRef.current = 0;
+        setApiStopped(false);
+      }
+      
+      // 连续失败超过阈值则停止
+      if (failCountRef.current >= MAX_FAIL_COUNT * 3) {
+        console.warn('[Trace] 连续失败过多，停止自动刷新');
         setApiStopped(true);
       }
       
+      setLoading(false);
+    } catch (error) {
+      // 总体错误处理
+      console.error('[Trace] 加载数据异常:', error);
       setLoading(false);
     } finally {
       setRefreshing(false);
@@ -340,13 +394,21 @@ function Trace() {
 
       {/* 执行流程图 - 垂直时间线 */}
       <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-700 bg-gray-850">
-          <h3 className="text-lg font-semibold text-white">📊 执行流程时间线</h3>
-          <p className="text-sm text-gray-400 mt-1">显示最近的 Agent 会话执行记录，点击查看详情</p>
+        <div className="px-6 py-4 border-b border-gray-700 bg-gray-850 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-white">📊 执行流程时间线</h3>
+            <p className="text-sm text-gray-400 mt-1">显示最近的 Agent 会话执行记录，点击查看详情</p>
+          </div>
+          {loadingStates.flow && (
+            <span className="text-sm text-blue-400 flex items-center space-x-2">
+              <span className="animate-spin">🔄</span>
+              <span>加载中...</span>
+            </span>
+          )}
         </div>
         
         <div className="p-6">
-          {loading ? (
+          {loadingStates.flow ? (
             <div className="text-center py-8 text-gray-400">
               🔄 正在加载执行流程...
             </div>
@@ -412,13 +474,25 @@ function Trace() {
 
       {/* 子 Agent 链路追踪 */}
       <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-700 bg-gray-850">
-          <h3 className="text-lg font-semibold text-white">🔗 子 Agent 链路追踪</h3>
-          <p className="text-sm text-gray-400 mt-1">从日志中解析的子 Agent 创建和执行情况</p>
+        <div className="px-6 py-4 border-b border-gray-700 bg-gray-850 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-white">🔗 子 Agent 链路追踪</h3>
+            <p className="text-sm text-gray-400 mt-1">从日志中解析的子 Agent 创建和执行情况</p>
+          </div>
+          {loadingStates.subagents && (
+            <span className="text-sm text-blue-400 flex items-center space-x-2">
+              <span className="animate-spin">🔄</span>
+              <span>加载中...</span>
+            </span>
+          )}
         </div>
         
         <div className="p-6">
-          {subAgentLinks.length === 0 ? (
+          {loadingStates.subagents ? (
+            <div className="text-center py-8 text-gray-400">
+              🔄 正在加载子 Agent 链路...
+            </div>
+          ) : subAgentLinks.length === 0 ? (
             <div className="text-center py-8 text-gray-400">
               📭 暂无子 Agent 执行记录
               <div className="text-xs mt-2">提示：子 Agent 由主 Agent 通过 sessions_spawn 创建</div>
@@ -486,13 +560,25 @@ function Trace() {
 
       {/* 渠道维度分析 */}
       <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-700 bg-gray-850">
-          <h3 className="text-lg font-semibold text-white">📱 渠道维度分析</h3>
-          <p className="text-sm text-gray-400 mt-1">各渠道的会话分布、Token 消耗和活跃 Agent</p>
+        <div className="px-6 py-4 border-b border-gray-700 bg-gray-850 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-white">📱 渠道维度分析</h3>
+            <p className="text-sm text-gray-400 mt-1">各渠道的会话分布、Token 消耗和活跃 Agent</p>
+          </div>
+          {loadingStates.channels && (
+            <span className="text-sm text-blue-400 flex items-center space-x-2">
+              <span className="animate-spin">🔄</span>
+              <span>加载中...</span>
+            </span>
+          )}
         </div>
         
         <div className="p-6">
-          {channelStats.length === 0 ? (
+          {loadingStates.channels ? (
+            <div className="text-center py-8 text-gray-400">
+              🔄 正在加载渠道数据...
+            </div>
+          ) : channelStats.length === 0 ? (
             <div className="text-center py-8 text-gray-400">
               📭 暂无渠道数据
             </div>
