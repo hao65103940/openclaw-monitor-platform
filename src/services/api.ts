@@ -13,7 +13,7 @@ let apiStopped = false;
 // 创建 axios 实例
 const api = axios.create({
   baseURL: API_BASE,
-  timeout: 5000, // 超时 5 秒
+  timeout: 15000, // 超时 15 秒（CLI 执行需要 1-2 秒，考虑并发和缓存）
 });
 
 /**

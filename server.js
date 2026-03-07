@@ -15,15 +15,19 @@ app.use(cors());
 app.use(express.json());
 
 /**
- * 执行 OpenClaw CLI 命令
+ * 执行 OpenClaw CLI 命令（带缓存）
  */
+let sessionsCache = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 5000; // 5 秒缓存
+
 function runOpenClawCommand(command) {
   try {
     // 使用完整路径
     const fullCommand = `/root/.nvm/versions/node/v24.13.0/bin/${command}`;
     const output = execSync(fullCommand, {
       encoding: 'utf-8',
-      timeout: 10000, // 10 秒超时
+      timeout: 15000, // 15 秒超时
       env: { ...process.env, PATH: `/root/.nvm/versions/node/v24.13.0/bin:${process.env.PATH}` },
     });
     return JSON.parse(output);
@@ -31,6 +35,23 @@ function runOpenClawCommand(command) {
     console.error(`[CLI] 命令失败：${command}`, error.message);
     throw error;
   }
+}
+
+/**
+ * 获取会话数据（带缓存）
+ */
+function getSessionsData() {
+  const now = Date.now();
+  // 检查缓存是否有效
+  if (sessionsCache && (now - cacheTimestamp) < CACHE_TTL) {
+    return sessionsCache;
+  }
+  
+  // 缓存失效，重新获取
+  const sessionsData = runOpenClawCommand('openclaw sessions --json');
+  sessionsCache = sessionsData;
+  cacheTimestamp = now;
+  return sessionsData;
 }
 
 /**
@@ -71,8 +92,8 @@ function formatDuration(ms) {
  */
 app.get('/api/subagents/list', (req, res) => {
   try {
-    // 获取最近的会话
-    const sessionsData = runOpenClawCommand('openclaw sessions --json');
+    // 使用缓存数据
+    const sessionsData = getSessionsData();
     const sessions = sessionsData.sessions || [];
     
     // 限制最近 20 条
@@ -110,7 +131,7 @@ app.get('/api/subagents/list', (req, res) => {
 app.get('/api/sessions/list', (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 20;
-    const sessionsData = runOpenClawCommand('openclaw sessions --json');
+    const sessionsData = getSessionsData();
     const sessions = (sessionsData.sessions || []).slice(0, limit);
     
     res.json({
@@ -141,7 +162,7 @@ app.get('/api/sessions/list', (req, res) => {
  */
 app.get('/api/stats', (req, res) => {
   try {
-    const sessionsData = runOpenClawCommand('openclaw sessions --json');
+    const sessionsData = getSessionsData();
     const sessions = sessionsData.sessions || [];
     
     // 统计
@@ -201,7 +222,7 @@ app.get('/api/health', (req, res) => {
  */
 app.get('/api/trace/flow', (req, res) => {
   try {
-    const sessionsData = runOpenClawCommand('openclaw sessions --json');
+    const sessionsData = getSessionsData();
     const sessions = sessionsData.sessions || [];
     
     // 转换为 TraceNode 格式
@@ -237,7 +258,7 @@ app.get('/api/trace/flow', (req, res) => {
  */
 app.get('/api/analytics/channels', (req, res) => {
   try {
-    const sessionsData = runOpenClawCommand('openclaw sessions --json');
+    const sessionsData = getSessionsData();
     const sessions = sessionsData.sessions || [];
     
     // 按渠道分组统计
@@ -286,7 +307,7 @@ app.get('/api/analytics/channels', (req, res) => {
  */
 app.get('/api/trace/subagents', (req, res) => {
   try {
-    const sessionsData = runOpenClawCommand('openclaw sessions --json');
+    const sessionsData = getSessionsData();
     const sessions = sessionsData.sessions || [];
     
     // 提取子 Agent 链路（从 key 中解析）
