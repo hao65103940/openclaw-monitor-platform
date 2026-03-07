@@ -207,33 +207,28 @@ function ConfigCard({ config, onExpand, isExpanded }: {
 function Configs() {
   const { activeAgents } = useAgentStore();
   const [expandedConfig, setExpandedConfig] = useState<string | null>(null);
-  const [agentConfigs, setAgentConfigs] = useState<AgentConfig[]>([]);
+  const [configs, setConfigs] = useState<{ agents: AgentConfig[]; skills: AgentConfig[] }>({ agents: [], skills: [] });
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'all' | 'agents' | 'skills'>('all');
 
-  // 加载 Agent 配置列表
+  // 加载配置列表
   useEffect(() => {
-    async function loadAgentConfigs() {
+    async function loadConfigs() {
       try {
         const response = await api.get('/agents/config/list');
-        const agents = response.data.agents || [];
-        
-        const formattedConfigs: AgentConfig[] = agents.map(agent => ({
-          id: agent.id,
-          name: formatAgentName(agent.id),
-          path: agent.path,
-          files: agent.files,
-        }));
-        
-        setAgentConfigs(formattedConfigs);
+        setConfigs({
+          agents: response.data.agents || [],
+          skills: response.data.skills || [],
+        });
         setLoading(false);
-        console.log('[Config] 已加载', formattedConfigs.length, '个 Agent 配置');
+        console.log('[Config] 已加载 - Agents:', response.data.agents?.length, 'Skills:', response.data.skills?.length);
       } catch (error) {
-        console.error('加载 Agent 配置列表失败:', error);
+        console.error('加载配置列表失败:', error);
         setLoading(false);
       }
     }
     
-    loadAgentConfigs();
+    loadConfigs();
   }, []);
 
   function formatAgentName(id: string): string {
@@ -247,20 +242,29 @@ function Configs() {
       'review-agent': '代码审查员 🔍',
     };
     if (names[id]) return names[id];
-    return id.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') + ' 🤖';
+    // 去掉 skill- 前缀
+    const cleanId = id.replace('skill-', '');
+    return cleanId.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') + ' 🤖';
   }
 
-  const totalAgents = agentConfigs.length;
+  const totalAgents = configs.agents.length;
+  const totalSkills = configs.skills.length;
+  const totalFiles = [...configs.agents, ...configs.skills].reduce((sum, c) => sum + c.files.length, 0);
   const activeCount = activeAgents?.length || 0;
+  
+  // 根据 tab 筛选显示
+  const allConfigs = activeTab === 'all' ? [...configs.agents, ...configs.skills] 
+    : activeTab === 'agents' ? configs.agents 
+    : configs.skills;
 
   return (
     <div className="space-y-6">
       {/* 统计卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-gray-800 rounded-lg p-6 border-l-4 border-blue-500 shadow-lg">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm font-medium">Agent 总数</p>
+              <p className="text-gray-400 text-sm font-medium">Agents</p>
               <p className="text-3xl font-bold mt-2 text-white">{totalAgents}</p>
             </div>
             <div className="text-4xl opacity-80">🤖</div>
@@ -270,10 +274,10 @@ function Configs() {
         <div className="bg-gray-800 rounded-lg p-6 border-l-4 border-green-500 shadow-lg">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm font-medium">活跃 Agent</p>
-              <p className="text-3xl font-bold mt-2 text-white">{activeCount}</p>
+              <p className="text-gray-400 text-sm font-medium">Skills</p>
+              <p className="text-3xl font-bold mt-2 text-white">{totalSkills}</p>
             </div>
-            <div className="text-4xl opacity-80">🟢</div>
+            <div className="text-4xl opacity-80">🛠️</div>
           </div>
         </div>
 
@@ -281,20 +285,62 @@ function Configs() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-400 text-sm font-medium">配置文件</p>
-              <p className="text-3xl font-bold mt-2 text-white">
-                {agentConfigs.reduce((sum, c) => sum + c.files.length, 0)}
-              </p>
+              <p className="text-3xl font-bold mt-2 text-white">{totalFiles}</p>
             </div>
             <div className="text-4xl opacity-80">📁</div>
           </div>
         </div>
+
+        <div className="bg-gray-800 rounded-lg p-6 border-l-4 border-yellow-500 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-400 text-sm font-medium">活跃 Agent</p>
+              <p className="text-3xl font-bold mt-2 text-white">{activeCount}</p>
+            </div>
+            <div className="text-4xl opacity-80">🟢</div>
+          </div>
+        </div>
       </div>
 
-      {/* Agent 配置列表 */}
+      {/* Tab 切换 */}
+      <div className="flex space-x-2">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            activeTab === 'all'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+          }`}
+        >
+          全部 ({totalAgents + totalSkills})
+        </button>
+        <button
+          onClick={() => setActiveTab('agents')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            activeTab === 'agents'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+          }`}
+        >
+          🤖 Agents ({totalAgents})
+        </button>
+        <button
+          onClick={() => setActiveTab('skills')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            activeTab === 'skills'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+          }`}
+        >
+          🛠️ Skills ({totalSkills})
+        </button>
+      </div>
+
+      {/* 配置列表 */}
       <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-700 bg-gray-850">
-          <h2 className="text-lg font-semibold text-white">⚙️ Agent 配置管理</h2>
-          <p className="text-sm text-gray-400 mt-1">点击 Agent 卡片展开查看和编辑配置文件</p>
+          <h2 className="text-lg font-semibold text-white">⚙️ 配置管理</h2>
+          <p className="text-sm text-gray-400 mt-1">点击配置卡片展开查看和编辑文件</p>
         </div>
 
         <div className="p-6 space-y-4">
@@ -302,8 +348,12 @@ function Configs() {
             <div className="text-center py-8 text-gray-400">
               🔄 正在加载配置...
             </div>
+          ) : allConfigs.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">
+              📭 暂无配置
+            </div>
           ) : (
-            agentConfigs.map((config) => (
+            allConfigs.map((config) => (
               <ConfigCard
                 key={config.id}
                 config={config}

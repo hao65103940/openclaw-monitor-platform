@@ -377,13 +377,18 @@ app.get('/api/sessions/:sessionId/history', (req, res) => {
 
 /**
  * GET /api/agents/config/list
- * 获取 Agent 配置列表（真实文件）
+ * 获取配置列表（按类型分组：agents、skills）
  */
 app.get('/api/agents/config/list', (req, res) => {
   try {
     const workspacePath = '/root/.openclaw/workspace';
-    const agents = [];
     
+    const result = {
+      agents: [],
+      skills: [],
+    };
+    
+    // ========== 1. Agents 配置 ==========
     // 主 Agent - 读取 workspace 根目录的所有 .md 文件
     const mainFiles = [];
     
@@ -402,7 +407,15 @@ app.get('/api/agents/config/list', (req, res) => {
       mainFiles.push(...memoryFiles);
     }
     
-    // 读取 skills 目录下的技能配置
+    result.agents.push({
+      id: 'main',
+      name: '主 Agent (夏娃 Eve ✨)',
+      path: workspacePath,
+      files: mainFiles,
+      category: 'agent',
+    });
+    
+    // ========== 2. Skills 配置 ==========
     const skillsPath = path.join(workspacePath, 'skills');
     if (fs.existsSync(skillsPath)) {
       const skillDirs = fs.readdirSync(skillsPath).filter(f => {
@@ -421,26 +434,23 @@ app.get('/api/agents/config/list', (req, res) => {
         
         skillFiles.push(...files);
         
-        agents.push({
+        result.skills.push({
           id: `skill-${skillDir}`,
           name: formatAgentName(skillDir),
           path: skillFullPath,
           files: skillFiles,
+          category: 'skill',
         });
       });
     }
     
-    agents.push({
-      id: 'main',
-      name: '主 Agent (夏娃 Eve ✨)',
-      path: workspacePath,
-      files: mainFiles,
-    });
+    // 按名称排序
+    result.skills.sort((a, b) => a.name.localeCompare(b.name));
     
-    res.json({ agents });
-    console.log('[API] 返回 Agent 配置列表:', agents.length, '个');
+    res.json(result);
+    console.log('[API] 返回配置列表：Agents:', result.agents.length, 'Skills:', result.skills.length);
   } catch (error) {
-    console.error('[API] 获取 Agent 配置列表失败:', error.message);
+    console.error('[API] 获取配置列表失败:', error.message);
     res.status(500).json({ 
       error: '获取数据失败',
       details: error.message,
