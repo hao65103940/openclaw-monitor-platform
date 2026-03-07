@@ -217,8 +217,8 @@ function PaginatedAgentTable({ agents, title, pageSize = 10, onViewLog }: {
             </tr>
           </thead>
           <tbody className="bg-gray-800 divide-y divide-gray-700">
-            {currentAgents.map((agent) => (
-              <tr key={agent.id} className="hover:bg-gray-750 transition-colors">
+            {currentAgents.map((agent, index) => (
+              <tr key={`${agent.id}-${index}-${agent.startedAt || Date.now()}`} className="hover:bg-gray-750 transition-colors">
                 <td className="px-6 py-4">
                   <div className="max-w-xl">
                     <div className="text-sm text-white font-medium mb-1">{agent.label || '未命名任务'}</div>

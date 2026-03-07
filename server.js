@@ -195,6 +195,121 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+/**
+ * GET /api/trace/flow
+ * 执行流程追踪
+ */
+app.get('/api/trace/flow', (req, res) => {
+  try {
+    const sessionsData = runOpenClawCommand('openclaw sessions --json');
+    const sessions = sessionsData.sessions || [];
+    
+    // 转换为 TraceNode 格式
+    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+    const flow = sessions.map(s => ({
+      id: s.key || `session:${s.updatedAt}`,
+      agentId: s.agentId || 'main',
+      channel: s.kind || 'direct',
+      channelId: null,
+      kind: s.kind || 'direct',
+      model: s.model || 'unknown',
+      status: s.updatedAt > fiveMinAgo ? 'running' : 'completed',
+      tokens: s.totalTokens || 0,
+      runtime: s.ageMs || 0,
+      timestamp: s.updatedAt,
+      key: s.key || `session:${s.updatedAt}`,
+      isActive: s.updatedAt > fiveMinAgo,
+    }));
+    
+    res.json({ flow });
+  } catch (error) {
+    console.error('[API] 获取执行流程失败:', error.message);
+    res.status(500).json({ 
+      error: '获取数据失败',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/analytics/channels
+ * 渠道统计
+ */
+app.get('/api/analytics/channels', (req, res) => {
+  try {
+    const sessionsData = runOpenClawCommand('openclaw sessions --json');
+    const sessions = sessionsData.sessions || [];
+    
+    // 按渠道分组统计
+    const channelMap = new Map();
+    sessions.forEach(s => {
+      const channel = s.kind || 'direct';
+      if (!channelMap.has(channel)) {
+        channelMap.set(channel, {
+          channel,
+          count: 0,
+          tokens: 0,
+          runtime: 0,
+          activeCount: 0,
+          agents: [],
+        });
+      }
+      const stat = channelMap.get(channel);
+      stat.count++;
+      stat.tokens += s.totalTokens || 0;
+      stat.runtime += s.ageMs || 0;
+      if (s.updatedAt > Date.now() - 5 * 60 * 1000) {
+        stat.activeCount++;
+      }
+      stat.agents.push(s.key || 'unknown');
+    });
+    
+    const channels = Array.from(channelMap.values()).map(c => ({
+      ...c,
+      avgTokens: c.count > 0 ? Math.round(c.tokens / c.count) : 0,
+      avgRuntime: c.count > 0 ? Math.round(c.runtime / c.count) : 0,
+    }));
+    
+    res.json({ channels });
+  } catch (error) {
+    console.error('[API] 获取渠道统计失败:', error.message);
+    res.status(500).json({ 
+      error: '获取数据失败',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/trace/subagents
+ * 子 Agent 链路
+ */
+app.get('/api/trace/subagents', (req, res) => {
+  try {
+    const sessionsData = runOpenClawCommand('openclaw sessions --json');
+    const sessions = sessionsData.sessions || [];
+    
+    // 提取子 Agent 链路（从 key 中解析）
+    const subAgentLinks = sessions
+      .filter(s => s.key && s.key.includes(':'))
+      .map(s => ({
+        id: s.key,
+        parentId: 'main',
+        status: s.updatedAt > Date.now() - 5 * 60 * 1000 ? 'running' : 'completed',
+        timestamp: s.updatedAt,
+        retries: 0,
+      }));
+    
+    res.json({ subagents: subAgentLinks });
+  } catch (error) {
+    console.error('[API] 获取子 Agent 链路失败:', error.message);
+    res.status(500).json({ 
+      error: '获取数据失败',
+      details: error.message,
+    });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Agent 监控平台 API 服务已启动`);
   console.log(`📡 监听端口：http://0.0.0.0:${PORT}`);
