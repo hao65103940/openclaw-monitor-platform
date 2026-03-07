@@ -105,25 +105,17 @@ function AgentTable({ agents, title, emptyMessage, onViewLog }: {
             {agents.map((agent) => (
               <tr key={agent.id} className="hover:bg-gray-750 transition-colors">
                 <td className="px-6 py-4">
-                  <div className="max-w-xl">
-                    <div className="text-sm text-white font-medium mb-1">{agent.label || '未命名任务'}</div>
+                  <div className="max-w-md">
+                    <div className="text-sm text-white font-medium mb-1 truncate" title={agent.label || '未命名任务'}>
+                      {agent.label || '未命名任务'}
+                    </div>
                     <div className="text-xs text-gray-400 truncate" title={agent.task}>
-                      {(agent.task || '').substring(0, 100)}{agent.task && agent.task.length > 100 ? '...' : ''}
+                      {(agent.task || '').substring(0, 80)}{agent.task && agent.task.length > 80 ? '...' : ''}
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="flex items-center space-x-3">
-                    <AgentStatusBadge status={agent.status} />
-                    {onViewLog && (
-                      <button
-                        onClick={() => onViewLog(agent)}
-                        className="px-3 py-1.5 text-xs bg-blue-700 hover:bg-blue-600 text-white rounded transition-colors whitespace-nowrap"
-                      >
-                        📋 查看
-                      </button>
-                    )}
-                  </div>
+                  <AgentStatusBadge status={agent.status} />
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-300 font-mono">
                   {agent.runtime || '-'}
@@ -148,6 +140,16 @@ function AgentTable({ agents, title, emptyMessage, onViewLog }: {
                     '-'
                   )}
                 </td>
+                {onViewLog && (
+                  <td className="px-6 py-4 text-center">
+                    <button
+                      onClick={() => onViewLog(agent)}
+                      className="px-3 py-1.5 text-xs bg-blue-700 hover:bg-blue-600 text-white rounded transition-colors whitespace-nowrap"
+                    >
+                      📋 查看
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
