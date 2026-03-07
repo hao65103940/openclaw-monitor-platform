@@ -38,11 +38,19 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
   useEffect(() => {
     loadHistory();
     
-    // 初始化 WebSocket 连接
-    const ws = io('http://localhost:3001');
+    // 只连接一次，不随 isPaused 变化重连
+    const ws = io('http://localhost:3001', {
+      reconnection: true,
+      reconnectionAttempts: 3, // 最多重试 3 次
+      reconnectionDelay: 1000,
+      timeout: 3000, // 超时 3 秒
+    });
+    
+    let connectAttempts = 0;
     
     ws.on('connect', () => {
       console.log('[WebSocket] 已连接');
+      connectAttempts = 0;
       
       // 订阅日志
       const sessionId = agent.id.split(':').pop();
@@ -52,9 +60,23 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
       }
     });
     
+    ws.on('connect_error', (error) => {
+      connectAttempts++;
+      console.warn(`[WebSocket] 连接失败 (${connectAttempts}/3):`, error.message);
+      
+      if (connectAttempts >= 3) {
+        console.warn('[WebSocket] 达到最大重试次数，停止连接');
+        setIsRealtime(false);
+      }
+    });
+    
     ws.on('log:new', (log: LogEntry) => {
       if (!isPaused) {
-        setLogs(prev => [...prev, log]);
+        setLogs(prev => {
+          // 限制最多 1000 条日志，防止内存累积
+          const updated = [...prev, log];
+          return updated.slice(-1000);
+        });
         // 自动滚动到底部
         setTimeout(() => {
           logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -63,9 +85,11 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
     });
     
     return () => {
+      console.log('[WebSocket] 清理连接');
+      ws.removeAllListeners();
       ws.disconnect();
     };
-  }, [agent.id, isPaused]);
+  }, [agent.id]); // 移除 isPaused 依赖，只随 agent.id 变化
 
   // 暂停/恢复实时日志
   function togglePause() {

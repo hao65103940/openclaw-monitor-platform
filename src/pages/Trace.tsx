@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 
 interface TraceNode {
@@ -54,14 +54,26 @@ function Trace() {
   const [selectedNode, setSelectedNode] = useState<TraceNode | null>(null);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
 
+  // 失败计数器 - 防止无限重试
+  const failCountRef = React.useRef(0);
+  const MAX_FAIL_COUNT = 3;
+  const [apiStopped, setApiStopped] = useState(false);
+
   useEffect(() => {
     loadAllData();
-    // 自动刷新
-    const interval = setInterval(loadAllData, 30000);
+    // 自动刷新 - API 停止后不再刷新
+    const interval = setInterval(() => {
+      if (!apiStopped) {
+        loadAllData();
+      }
+    }, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [apiStopped]);
 
   async function loadAllData() {
+    // API 已停止则跳过
+    if (apiStopped) return;
+    
     try {
       setRefreshing(true);
       const [traceResponse, channelResponse, subAgentResponse] = await Promise.all([
@@ -70,12 +82,23 @@ function Trace() {
         api.get('/trace/subagents'),
       ]);
       
+      // 成功后重置失败计数
+      failCountRef.current = 0;
+      setApiStopped(false);
+      
       setFlow(traceResponse.data.flow || []);
       setChannelStats(channelResponse.data.channels || []);
       setSubAgentLinks(subAgentResponse.data.subagents || []);
       setLoading(false);
     } catch (error) {
-      console.error('加载数据失败:', error);
+      failCountRef.current++;
+      console.error(`加载数据失败 (${failCountRef.current}/${MAX_FAIL_COUNT}):`, error);
+      
+      if (failCountRef.current >= MAX_FAIL_COUNT) {
+        console.warn('连续失败 3 次，停止自动刷新');
+        setApiStopped(true);
+      }
+      
       setLoading(false);
     } finally {
       setRefreshing(false);
@@ -239,6 +262,35 @@ function Trace() {
         </div>
       </div>
 
+      {/* API 停止提示 */}
+      {apiStopped && (
+        <div className="rounded-lg p-4 border bg-red-900/30 border-red-700 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <p className="font-semibold text-red-300">
+                  API 已停止自动刷新
+                </p>
+                <p className="text-sm text-gray-400">
+                  🚫 后端服务不可用，已连续失败 3 次
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                failCountRef.current = 0;
+                setApiStopped(false);
+                loadAllData();
+              }}
+              className="px-4 py-2 rounded-md text-sm font-medium bg-red-700 hover:bg-red-600 text-white transition-colors"
+            >
+              🔄 重试连接
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 过滤器 */}
       <div className="flex items-center space-x-4">
         <h2 className="text-lg font-semibold text-white">🔍 执行流程追踪</h2>
@@ -276,13 +328,13 @@ function Trace() {
         </div>
         <button
           onClick={loadAllData}
-          disabled={refreshing}
+          disabled={refreshing || apiStopped}
           className={`ml-auto px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm transition-colors flex items-center space-x-2 ${
-            refreshing ? 'opacity-50 cursor-not-allowed' : ''
+            refreshing || apiStopped ? 'opacity-50 cursor-not-allowed' : ''
           }`}
         >
           <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
-          <span>{refreshing ? '刷新中...' : '刷新'}</span>
+          <span>{refreshing ? '刷新中...' : apiStopped ? '已停止' : '刷新'}</span>
         </button>
       </div>
 
