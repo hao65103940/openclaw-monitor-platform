@@ -132,7 +132,7 @@ export async function getSubagents(): Promise<SubagentsListResponse> {
   }
   
   try {
-    const response = await api.get('/agents/list');
+    const response = await api.get('/subagents/list');
     return response.data;
   } catch (error) {
     console.error('[API] getSubagents 失败:', error);
