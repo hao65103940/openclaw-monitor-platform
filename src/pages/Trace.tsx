@@ -499,60 +499,70 @@ function Trace() {
             </div>
           ) : (
             <div className="space-y-3">
-              {subAgentLinks.map((subagent) => (
-                <div 
-                  key={subagent.id}
-                  className="flex items-center p-4 bg-gray-900/50 rounded-lg border border-gray-700"
-                >
-                  {/* 状态图标 */}
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
-                    subagent.status === 'running' ? 'bg-green-900/30 text-green-400' :
-                    subagent.status === 'completed' ? 'bg-blue-900/30 text-blue-400' :
-                    subagent.status === 'failed' ? 'bg-red-900/30 text-red-400' :
-                    'bg-gray-900/30 text-gray-400'
-                  }`}>
-                    {subagent.status === 'running' ? '🟢' :
-                     subagent.status === 'completed' ? '✅' :
-                     subagent.status === 'failed' ? '❌' : '⏳'}
-                  </div>
-                  
-                  {/* 子 Agent 信息 */}
-                  <div className="ml-4 flex-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-white font-semibold">🤖 {subagent.id.split(':').pop()}</span>
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        subagent.status === 'running' ? 'bg-green-900/30 text-green-300' :
-                        subagent.status === 'completed' ? 'bg-blue-900/30 text-blue-300' :
-                        subagent.status === 'failed' ? 'bg-red-900/30 text-red-300' :
-                        'bg-gray-900/30 text-gray-300'
-                      }`}>
-                        {subagent.status}
-                      </span>
+              {subAgentLinks.map((subagent) => {
+                // 🔧 优化：智能解析 ID，提取有意义的部分
+                const idParts = subagent.id.split(':');
+                const displayName = idParts.length > 2 
+                  ? idParts.slice(2).join(':') // 显示 agent:main 之后的部分
+                  : subagent.id;
+                
+                return (
+                  <div 
+                    key={subagent.id}
+                    className="flex items-center p-4 bg-gray-900/50 rounded-lg border border-gray-700"
+                  >
+                    {/* 状态图标 */}
+                    <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg ${
+                      subagent.status === 'running' ? 'bg-green-900/30 text-green-400' :
+                      subagent.status === 'completed' ? 'bg-blue-900/30 text-blue-400' :
+                      subagent.status === 'failed' ? 'bg-red-900/30 text-red-400' :
+                      'bg-gray-900/30 text-gray-400'
+                    }`}>
+                      {subagent.status === 'running' ? '🟢' :
+                       subagent.status === 'completed' ? '✅' :
+                       subagent.status === 'failed' ? '❌' : '⏳'}
                     </div>
-                    <div className="text-sm text-gray-400 mt-1">
-                      ID: <span className="font-mono text-xs">{subagent.id}</span>
-                    </div>
-                    <div className="text-sm text-gray-400">
-                      父 Agent: <span className="font-mono text-xs text-blue-400">{subagent.parentId}</span>
-                    </div>
-                    {subagent.retries > 0 && (
-                      <div className="text-sm text-orange-400">
-                        ⚠️ 重试次数：{subagent.retries}
+                    
+                    {/* 子 Agent 信息 */}
+                    <div className="ml-4 flex-1 min-w-0">
+                      <div className="flex items-center space-x-2 flex-wrap">
+                        <span className="text-white font-semibold truncate" title={displayName}>
+                          🤖 {displayName}
+                        </span>
+                        <span className={`px-2 py-1 rounded text-xs flex-shrink-0 ${
+                          subagent.status === 'running' ? 'bg-green-900/30 text-green-300' :
+                          subagent.status === 'completed' ? 'bg-blue-900/30 text-blue-300' :
+                          subagent.status === 'failed' ? 'bg-red-900/30 text-red-300' :
+                          'bg-gray-900/30 text-gray-300'
+                        }`}>
+                          {subagent.status}
+                        </span>
                       </div>
-                    )}
-                    {subagent.error && (
-                      <div className="text-sm text-red-400">
-                        ❌ 错误：{subagent.error}
+                      <div className="text-sm text-gray-400 mt-1 truncate" title={subagent.id}>
+                        <span className="text-xs">ID:</span> <span className="font-mono text-xs">{subagent.id}</span>
                       </div>
-                    )}
+                      <div className="text-sm text-gray-400">
+                        <span className="text-xs">父 Agent:</span> <span className="font-mono text-xs text-blue-400">{subagent.parentId}</span>
+                      </div>
+                      {subagent.retries > 0 && (
+                        <div className="text-sm text-orange-400">
+                          ⚠️ 重试次数：{subagent.retries}
+                        </div>
+                      )}
+                      {subagent.error && (
+                        <div className="text-sm text-red-400 truncate" title={subagent.error}>
+                          ❌ 错误：{subagent.error}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* 时间 */}
+                    <div className="text-right text-sm text-gray-400 flex-shrink-0 ml-4">
+                      <div>{formatTime(subagent.timestamp)}</div>
+                    </div>
                   </div>
-                  
-                  {/* 时间 */}
-                  <div className="text-right text-sm text-gray-400">
-                    <div>{formatTime(subagent.timestamp)}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -587,57 +597,53 @@ function Trace() {
               {channelStats.map((channel) => (
                 <div 
                   key={channel.channel} 
-                  className="p-4 bg-gray-900/50 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors"
+                  className="p-4 bg-gray-900/50 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors min-w-0"
                 >
-                  <div className="flex items-center space-x-3 mb-3">
-                    <div className="text-3xl">{getChannelIcon(channel.channel)}</div>
-                    <div>
-                      <div className="text-white font-semibold">{formatChannel(channel.channel)}</div>
+                  <div className="flex items-start space-x-3 mb-3">
+                    <div className="text-3xl flex-shrink-0">{getChannelIcon(channel.channel)}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-white font-semibold break-words">{formatChannel(channel.channel)}</div>
                       <div className="text-xs text-gray-400">{channel.count} 次会话</div>
                     </div>
                   </div>
                   
                   <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <span className="text-gray-400">Token 消耗</span>
-                      <span className="text-white font-mono">{formatNumber(channel.tokens)}</span>
+                      <span className="text-white font-mono text-right break-all">{formatNumber(channel.tokens)}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <span className="text-gray-400">平均 Token</span>
-                      <span className="text-white font-mono">{formatNumber(channel.avgTokens)}</span>
+                      <span className="text-white font-mono text-right break-all">{formatNumber(channel.avgTokens)}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <span className="text-gray-400">总耗时</span>
-                      <span className="text-white font-mono">{formatDuration(channel.runtime)}</span>
+                      <span className="text-white font-mono text-right break-all">{formatDuration(channel.runtime)}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <span className="text-gray-400">平均耗时</span>
-                      <span className="text-white font-mono">{formatDuration(channel.avgRuntime)}</span>
+                      <span className="text-white font-mono text-right break-all">{formatDuration(channel.avgRuntime)}</span>
                     </div>
                     {channel.activeCount > 0 && (
-                      <div className="flex justify-between pt-2 border-t border-gray-700">
+                      <div className="flex justify-between items-center pt-2 border-t border-gray-700">
                         <span className="text-gray-400">活跃会话</span>
-                        <span className="text-green-400">🟢 {channel.activeCount}</span>
+                        <span className="text-green-400 font-mono text-right">🟢 {channel.activeCount}</span>
                       </div>
                     )}
                   </div>
                   
                   <div className="mt-3 pt-3 border-t border-gray-700">
                     <div className="text-xs text-gray-400 mb-2">涉及 Agent</div>
-                    <div className="flex flex-wrap gap-1">
-                      {channel.agents.slice(0, 5).map(agentId => (
+                    <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                      {channel.agents.map((agentId, idx) => (
                         <span 
-                          key={agentId} 
-                          className="px-2 py-1 bg-gray-800 text-gray-300 text-xs rounded"
+                          key={`${agentId}-${idx}`} 
+                          className="px-2 py-1 bg-gray-800 text-gray-300 text-xs rounded break-all hover:bg-gray-700 transition-colors cursor-default"
+                          title={agentId}
                         >
                           {agentId}
                         </span>
                       ))}
-                      {channel.agents.length > 5 && (
-                        <span className="px-2 py-1 bg-gray-800 text-gray-500 text-xs rounded">
-                          +{channel.agents.length - 5}
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
