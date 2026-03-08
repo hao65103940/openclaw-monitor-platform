@@ -907,6 +907,69 @@ app.get('/api/logs/read', (req, res) => {
 });
 
 /**
+ * GET /api/gateway-logs
+ * 获取 OpenClaw Gateway 日志（通过 openclaw logs --follow）
+ */
+let gatewayLogsCache = {
+  lines: [],
+  timestamp: 0,
+};
+const GATEWAY_LOGS_CACHE_TTL = 2000; // 2 秒缓存
+
+app.get('/api/gateway-logs', async (req, res) => {
+  try {
+    const { lines = 200, follow = false } = req.query;
+    const now = Date.now();
+    
+    // 检查缓存（避免频繁调用 CLI）
+    if (!follow && gatewayLogsCache.lines.length > 0 && (now - gatewayLogsCache.timestamp) < GATEWAY_LOGS_CACHE_TTL) {
+      return res.json({
+        success: true,
+        source: 'gateway-cache',
+        lines: gatewayLogsCache.lines,
+        total: gatewayLogsCache.lines.length,
+      });
+    }
+    
+    // 调用 openclaw logs --follow
+    const limit = parseInt(lines) || 200;
+    const command = `${OPENCLAW.cliPath} logs --follow --limit ${limit} --plain`;
+    
+    const output = execSync(command, {
+      encoding: 'utf-8',
+      timeout: 10000,
+      env: { 
+        ...process.env, 
+        PATH: `${path.dirname(OPENCLAW.nodePath)}:${process.env.PATH}`,
+      },
+    });
+    
+    // 按行分割
+    const logLines = output.split('\n').filter(line => line.trim());
+    
+    // 更新缓存
+    gatewayLogsCache.lines = logLines;
+    gatewayLogsCache.timestamp = now;
+    
+    res.json({
+      success: true,
+      source: 'gateway',
+      lines: logLines,
+      total: logLines.length,
+    });
+  } catch (error) {
+    console.error('[API] 获取 Gateway 日志失败:', error.message);
+    res.json({
+      success: false,
+      source: 'gateway',
+      lines: [`❌ 获取 Gateway 日志失败：${error.message}`],
+      total: 1,
+      error: error.message,
+    });
+  }
+});
+
+/**
  * WebSocket 支持（Socket.io）
  * 注意：需要安装 socket.io 包
  * 当前版本不支持，前端会回退到轮询模式
