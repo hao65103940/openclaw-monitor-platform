@@ -115,7 +115,7 @@ function getSessionsData() {
  */
 function formatAgent(session, label) {
   return {
-    id: session.sessionKey || `session:${session.id || Date.now()}`,
+    id: session.sessionKey || session.key || `agent:unknown`,  // 使用 sessionKey（agent:main:main 格式）
     agentId: 'agent:main',
     status: 'done', // 存储的会话都是已完成的
     task: label || '未知任务',
@@ -438,11 +438,14 @@ app.get('/api/trace/subagents', (req, res) => {
 /**
  * GET /api/sessions/:sessionId/history
  * 获取会话历史日志（从 JSONL 文件读取）
+ * 支持两种 ID 格式：
+ * - sessionKey: agent:main:main
+ * - sessionId (UUID): c9be6b89-67c5-44da-9079-dbe0254ca065
  */
 app.get('/api/sessions/:sessionId/history', async (req, res) => {
   try {
-    const sessionId = req.params.sessionId;
-    console.log(`[API] 请求会话历史：${sessionId}`);
+    const requestedId = req.params.sessionId;
+    console.log(`[API] 请求会话历史：${requestedId}`);
     
     // 1. 从 sessions.json 查找对应的 jsonl 文件路径
     const sessionsIndexPath = path.join(OPENCLAW.agentsPath, 'main/sessions/sessions.json');
@@ -450,28 +453,46 @@ app.get('/api/sessions/:sessionId/history', async (req, res) => {
     if (!fs.existsSync(sessionsIndexPath)) {
       return res.status(404).json({ 
         error: '会话索引文件不存在',
-        sessionId,
+        sessionId: requestedId,
       });
     }
     
     const sessionsIndex = JSON.parse(fs.readFileSync(sessionsIndexPath, 'utf-8'));
-    const sessionInfo = sessionsIndex[sessionId];
+    
+    // 2. 尝试两种方式查找 session：
+    // - 直接用 requestedId 作为 key 查找（sessionKey 格式）
+    // - 遍历查找 sessionId 匹配的（UUID 格式）
+    let sessionInfo = sessionsIndex[requestedId];
+    let sessionKey = requestedId;
+    
+    if (!sessionInfo || !sessionInfo.sessionId) {
+      // 尝试通过 UUID 查找
+      for (const [key, info] of Object.entries(sessionsIndex)) {
+        if (info.sessionId === requestedId) {
+          sessionInfo = info;
+          sessionKey = key;
+          break;
+        }
+      }
+    }
     
     if (!sessionInfo || !sessionInfo.sessionId) {
       return res.status(404).json({ 
         error: '会话不存在',
-        sessionId,
+        sessionId: requestedId,
+        hint: '请检查 sessionKey 或 sessionId 是否正确',
       });
     }
     
-    // 2. 构建 jsonl 文件路径
+    // 3. 构建 jsonl 文件路径
     const actualSessionId = sessionInfo.sessionId;
     const jsonlPath = `/root/.openclaw/agents/main/sessions/${actualSessionId}.jsonl`;
     
     if (!fs.existsSync(jsonlPath)) {
       return res.status(404).json({ 
         error: '会话日志文件不存在',
-        sessionId,
+        sessionId: requestedId,
+        sessionKey,
         actualSessionId,
       });
     }
@@ -545,8 +566,9 @@ app.get('/api/sessions/:sessionId/history', async (req, res) => {
     res.json({ 
       history,
       toolCalls,
-      sessionId,
-      actualSessionId,
+      sessionId: sessionKey,  // 返回 sessionKey（agent:main:main 格式）
+      actualSessionId,        // UUID 格式
+      requestedId,            // 请求时使用的 ID
       source: 'jsonl',
       totalLines: lines.length,
     });
