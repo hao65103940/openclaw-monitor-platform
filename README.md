@@ -38,13 +38,20 @@ cd /root/.openclaw/claweye
 # 安装依赖
 npm install
 
-# 启动服务
+# 方式 1：同时启动前后端（开发模式）
 npm run start
+
+# 方式 2：分别启动
+npm run server  # 后端（端口 3001）
+npm run dev     # 前端（端口 3000）
 ```
 
 ### 访问
 
-打开浏览器访问：`http://localhost:5173`
+打开浏览器访问：
+
+- **前端**：`http://localhost:3000`
+- **后端 API**：`http://localhost:3001`
 
 ---
 
@@ -103,27 +110,27 @@ npm run start
 ## 📊 API 端点
 
 ### 分析 API
-```
-GET /api/analytics/token-history      # Token 时间序列趋势
-GET /api/analytics/token-efficiency   # Token 效率分析
-GET /api/analytics/cost-estimate      # 成本估算
-GET /api/analytics/session-lifecycle  # 会话生命周期
-GET /api/analytics/session-types      # 会话类型分布
-GET /api/analytics/failure-analysis   # 失败会话分析
-GET /api/analytics/model-stats        - 模型使用统计
-GET /api/analytics/performance-bottleneck # 性能瓶颈
-GET /api/analytics/tool-usage         # 工具调用分析
-GET /api/analytics/channel-detail     # 渠道详细分析
-GET /api/analytics/subagent-stats     # 子 Agent 统计
+```bash
+GET /api/analytics/token-history          # Token 时间序列趋势
+GET /api/analytics/token-efficiency       # Token 效率分析
+GET /api/analytics/cost-estimate          # 成本估算
+GET /api/analytics/session-lifecycle      # 会话生命周期
+GET /api/analytics/session-types          # 会话类型分布
+GET /api/analytics/failure-analysis       # 失败会话分析
+GET /api/analytics/model-stats            # 模型使用统计
+GET /api/analytics/performance-bottleneck # 性能瓶颈（P50/P90/P99）
+GET /api/analytics/tool-usage             # 工具调用分析
+GET /api/analytics/channel-detail         # 渠道详细分析
+GET /api/analytics/subagent-stats         # 子 Agent 统计
 ```
 
 ### 其他 API
-```
-GET /api/sessions                     # 会话列表
-GET /api/sessions/:id                 # 会话详情
-GET /api/sessions/:id/history         # 会话历史
-GET /api/analytics/channels           # 渠道统计
-GET /api/trace/subagents              # 子 Agent 链路
+```bash
+GET /api/sessions               # 会话列表
+GET /api/sessions/:id           # 会话详情
+GET /api/sessions/:id/history   # 会话历史
+GET /api/analytics/channels     # 渠道统计
+GET /api/trace/subagents        # 子 Agent 链路
 ```
 
 ---
@@ -133,9 +140,26 @@ GET /api/trace/subagents              # 子 Agent 链路
 - **前端**：React 18 + TypeScript + Vite
 - **状态管理**：Zustand
 - **图表**：ECharts + echarts-for-react
-- **样式**：TailwindCSS + 自定义 CSS
+- **样式**：TailwindCSS + 自定义 CSS（毛玻璃效果）
 - **实时通信**：Socket.IO
 - **后端**：Express + Node.js
+- **路由**：React Router DOM
+
+## 📁 项目结构
+
+```
+claweye/
+├── src/
+│   ├── components/      # 可复用组件
+│   ├── pages/          # 页面组件
+│   ├── services/       # API 服务
+│   ├── store/          # 状态管理
+│   ├── types/          # TypeScript 类型
+│   └── App.tsx         # 主应用组件
+├── server.js           # 后端服务器
+├── package.json        # 项目配置
+└── README.md          # 项目文档
+```
 
 ---
 
