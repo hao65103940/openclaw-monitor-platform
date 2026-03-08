@@ -430,52 +430,6 @@ function Trace() {
             />
           )}
         </div>
-        
-          <div className="flex items-center space-x-2">
-            <div className="flex space-x-2">
-              <button
-                onClick={() => setFilter('all')}
-                className={`px-3 py-1 rounded text-sm transition-colors ${
-                  filter === 'all' 
-                    ? 'bg-blue-700 text-white' 
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                全部 ({flow.length})
-              </button>
-              <button
-                onClick={() => setFilter('active')}
-                className={`px-3 py-1 rounded text-sm transition-colors ${
-                  filter === 'active' 
-                    ? 'bg-green-700 text-white' 
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                🟢 活跃 ({flow.filter(s => s.isActive).length})
-              </button>
-              <button
-                onClick={() => setFilter('completed')}
-                className={`px-3 py-1 rounded text-sm transition-colors ${
-                  filter === 'completed' 
-                    ? 'bg-gray-700 text-white' 
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                ✅ 已完成 ({flow.filter(s => !s.isActive).length})
-              </button>
-            </div>
-            <button
-              onClick={loadAllData}
-              disabled={refreshing || apiStopped}
-              className={`ml-2 px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm transition-colors flex items-center space-x-2 ${
-                refreshing || apiStopped ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
-            >
-              <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
-              <span>{refreshing ? '刷新中...' : apiStopped ? '已停止' : '刷新'}</span>
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Tab 内容 */}
