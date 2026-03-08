@@ -118,7 +118,9 @@ function formatAgent(session, label) {
   const updatedAt = session.updatedAt;
   
   return {
-    id: session.sessionKey || session.key || `agent:unknown`,  // 使用 sessionKey（agent:main:main 格式）
+    id: session.sessionId || session.sessionKey || session.key || `agent:unknown`,  // 优先使用 UUID 格式的 sessionId
+    sessionId: session.sessionId || session.key,  // 添加 sessionId 字段
+    sessionKey: session.key || session.sessionKey,  // 添加 sessionKey 字段
     agentId: 'agent:main',
     status: 'done', // 存储的会话都是已完成的
     task: label || '未知任务',
