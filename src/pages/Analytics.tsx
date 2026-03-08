@@ -12,8 +12,12 @@ import SubAgentStats from '../components/SubAgentStats';
 
 function Analytics() {
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold">📈 性能分析</h2>
+    <div className="space-y-8 p-6">
+      {/* 标题区域 */}
+      <div className="mb-8">
+        <h2 className="title-modern mb-2">📈 性能分析中心</h2>
+        <p className="subtitle-modern">实时监控 · 深度洞察 · 智能决策</p>
+      </div>
       
       {/* 阶段 1：Token 深度分析 */}
       <TokenHistory />

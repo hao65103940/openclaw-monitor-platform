@@ -65,7 +65,7 @@ export default function SubAgentStats() {
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+    <div className="card-modern p-6">
       <h3 className="text-lg font-semibold text-white mb-6 flex items-center">
         <span className="text-xl mr-2">🤖</span>
         子 Agent 统计

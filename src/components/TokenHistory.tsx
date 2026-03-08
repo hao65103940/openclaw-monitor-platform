@@ -160,25 +160,26 @@ export default function TokenHistory() {
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+    <div className="card-modern p-6">
       {/* 标题和范围选择 */}
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-white flex items-center">
-          <span className="text-xl mr-2">📈</span>
-          Token 使用趋势
-        </h3>
+        <div>
+          <h3 className="text-lg font-semibold text-white flex items-center">
+            <span className="text-xl mr-2">📈</span>
+            Token 使用趋势
+          </h3>
+          <p className="text-xs text-gray-500 mt-1">实时追踪 Token 消耗动态</p>
+        </div>
         <div className="flex space-x-2">
           {['7d', '30d', '90d'].map((r) => (
             <button
               key={r}
               onClick={() => handleRangeChange(r)}
-              className={`px-3 py-1 text-xs rounded transition-colors ${
-                range === r
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              className={`btn-modern btn-secondary text-xs ${
+                range === r ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-900' : ''
               }`}
             >
-              {r === '7d' ? '最近 7 天' : r === '30d' ? '最近 30 天' : '最近 90 天'}
+              {r === '7d' ? '🕐 7 天' : r === '30d' ? '📅 30 天' : '📆 90 天'}
             </button>
           ))}
         </div>
@@ -190,23 +191,25 @@ export default function TokenHistory() {
       </div>
 
       {/* 图例说明 */}
-      <div className="mt-4 pt-4 border-t border-gray-700 text-xs text-gray-400 flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <span className="flex items-center">
-            <span className="w-3 h-3 bg-blue-600 rounded mr-1"></span>
-            输入 Token
-          </span>
-          <span className="flex items-center">
-            <span className="w-3 h-3 bg-green-600 rounded mr-1"></span>
-            输出 Token
-          </span>
-          <span className="flex items-center">
-            <span className="w-3 h-3 bg-purple-600 rounded mr-1"></span>
-            上下文 Token
-          </span>
-        </div>
-        <div className="text-gray-500">
-          按天统计
+      <div className="mt-6 pt-4 border-t border-gray-700">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center space-x-6">
+            <span className="flex items-center text-sm text-gray-400">
+              <span className="w-3 h-3 bg-blue-600 rounded-full mr-2 shadow-lg shadow-blue-500/50"></span>
+              输入 Token
+            </span>
+            <span className="flex items-center text-sm text-gray-400">
+              <span className="w-3 h-3 bg-green-600 rounded-full mr-2 shadow-lg shadow-green-500/50"></span>
+              输出 Token
+            </span>
+            <span className="flex items-center text-sm text-gray-400">
+              <span className="w-3 h-3 bg-purple-600 rounded-full mr-2 shadow-lg shadow-purple-500/50"></span>
+              上下文 Token
+            </span>
+          </div>
+          <div className="text-xs text-gray-500 badge-modern badge-primary">
+            📊 按天统计
+          </div>
         </div>
       </div>
     </div>
