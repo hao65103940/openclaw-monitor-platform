@@ -1,10 +1,10 @@
-[dotenv@17.3.1] injecting env (12) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
-📋 已加载配置文件：config.json
+[dotenv@17.3.1] injecting env (13) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
 ⚙️  配置信息:
    端口：3001
    OpenClaw 路径：/root/.openclaw
    Agents 路径：/root/.openclaw/agents
-   日志路径：/root/.openclaw/monitor-platform/logs
+   日志路径：/root/.openclaw/claweye/logs
+   日志级别：info
 🚀 Agent 监控平台 API 服务已启动
 📡 监听端口：http://0.0.0.0:3001
 🔌 WebSocket 已启用 (Socket.io)
@@ -18,50 +18,3 @@
    WS /                    - WebSocket 实时日志
 💡 当前使用 **真实数据** (OpenClaw CLI)
 🌐 可从外部访问（需要防火墙开放端口）
-[WS] 客户端连接: vg6Bq7rjpgLbFkX1AAAB
-[WS] 客户端订阅会话状态: vg6Bq7rjpgLbFkX1AAAB
-[WS] 客户端连接: lJmo9ipYPkvOB1ppAAAD
-[WS] 客户端订阅会话历史: agent:main:main lJmo9ipYPkvOB1ppAAAD
-[WS] 客户端断开: lJmo9ipYPkvOB1ppAAAD
-[WS] 客户端连接: L_cTXYYRrQwWfrgYAAAF
-[WS] 客户端订阅会话历史: agent:main:main L_cTXYYRrQwWfrgYAAAF
-[WS] 客户端取消订阅会话历史: agent:main:main
-[WS] 客户端断开: L_cTXYYRrQwWfrgYAAAF
-[WS] 客户端连接: rpLD-nhNgpV5bsAtAAAH
-[WS] 客户端订阅会话历史: agent:main:cron:7c450201-d3c4-41bf-bd2b-9e2955cb7b3f rpLD-nhNgpV5bsAtAAAH
-[WS] 客户端取消订阅会话历史: agent:main:cron:7c450201-d3c4-41bf-bd2b-9e2955cb7b3f
-[WS] 客户端断开: rpLD-nhNgpV5bsAtAAAH
-[WS] 客户端断开: vg6Bq7rjpgLbFkX1AAAB
-[API] 返回配置列表 - Agents: 7 Workspace: 26 Skills: 12
-[API] 返回配置列表 - Agents: 7 Workspace: 26 Skills: 12
-[WS] 客户端连接: L7Xt_wG3SBsflYq1AAAJ
-[WS] 客户端订阅会话状态: L7Xt_wG3SBsflYq1AAAJ
-[WS] 客户端断开: L7Xt_wG3SBsflYq1AAAJ
-[WS] 客户端连接: y-GllP1LeSk8HEohAAAL
-[WS] 客户端订阅会话状态: y-GllP1LeSk8HEohAAAL
-[WS] 客户端断开: y-GllP1LeSk8HEohAAAL
-[WS] 客户端连接: yle9-hsy6090CKlUAAAN
-[WS] 客户端订阅会话状态: yle9-hsy6090CKlUAAAN
-[WS] 客户端断开: yle9-hsy6090CKlUAAAN
-[WS] 客户端连接: y4HfpQr9HjbAxn5BAAAP
-[WS] 客户端断开: y4HfpQr9HjbAxn5BAAAP
-[WS] 客户端连接: YZpqmz0aKhQzbDLdAAAR
-[WS] 客户端订阅会话状态: YZpqmz0aKhQzbDLdAAAR
-[WS] 客户端断开: YZpqmz0aKhQzbDLdAAAR
-[API] 返回配置列表 - Agents: 7 Workspace: 26 Skills: 12
-[API] 返回配置列表 - Agents: 7 Workspace: 26 Skills: 12
-[WS] 客户端连接: 8EvYjjwyVaeeXXMGAAAT
-[WS] 客户端订阅会话状态: 8EvYjjwyVaeeXXMGAAAT
-[WS] 客户端断开: 8EvYjjwyVaeeXXMGAAAT
-[WS] 客户端连接: 44-96EumzkUylAMpAAAV
-[WS] 客户端订阅会话状态: 44-96EumzkUylAMpAAAV
-[WS] 客户端断开: 44-96EumzkUylAMpAAAV
-[WS] 客户端连接: W3lnBnHCUhq0jZ0WAAAX
-[WS] 客户端订阅会话状态: W3lnBnHCUhq0jZ0WAAAX
-[WS] 客户端连接: QMcSi5FQ3TRKpGZvAAAZ
-[WS] 客户端订阅会话历史: agent:main:main QMcSi5FQ3TRKpGZvAAAZ
-[WS] 客户端取消订阅会话历史: agent:main:main
-[WS] 客户端断开: QMcSi5FQ3TRKpGZvAAAZ
-[WS] 客户端断开: W3lnBnHCUhq0jZ0WAAAX
-[WS] 客户端连接: fHUJO06W4WVaAoGYAAAb
-[WS] 客户端订阅会话状态: fHUJO06W4WVaAoGYAAAb

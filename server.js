@@ -29,15 +29,24 @@ let appConfig = {};
 const configPath = path.join(__dirname, 'config.json');
 if (fs.existsSync(configPath)) {
   appConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-  console.log('📋 已加载配置文件：config.json');
+}
+
+// 日志级别控制（debug | info | warn | error）
+const LOG_LEVEL = process.env.LOG_LEVEL || appConfig.server?.logLevel || 'info';
+const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
+
+function log(level, message, ...args) {
+  if (LOG_LEVELS[level] >= LOG_LEVELS[LOG_LEVEL]) {
+    console[level](message, ...args);
+  }
 }
 
 // 从环境变量或配置文件读取配置
 const PORT = parseInt(process.env.PORT || appConfig.server?.port || '3001');
 const HOST = process.env.HOST || appConfig.server?.host || '0.0.0.0';
-const CACHE_TTL = parseInt(process.env.CACHE_TTL || appConfig.server?.cacheTTL || '20000'); // 优化：10s → 20s
-const STATS_CACHE_TTL = 60000; // 优化：统计数据 30s → 60 秒缓存
-const SESSIONS_CACHE_TTL = 30000; // 优化：会话列表 15s → 30 秒缓存
+const CACHE_TTL = parseInt(process.env.CACHE_TTL || appConfig.server?.cacheTTL || '20000');
+const STATS_CACHE_TTL = 60000;
+const SESSIONS_CACHE_TTL = 30000;
 
 // OpenClaw 路径配置
 const OPENCLAW = {
@@ -59,11 +68,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-console.log('⚙️  配置信息:');
-console.log(`   端口：${PORT}`);
-console.log(`   OpenClaw 路径：${OPENCLAW.basePath}`);
-console.log(`   Agents 路径：${OPENCLAW.agentsPath}`);
-console.log(`   日志路径：${LOG_PATH}`);
+log('info', '⚙️  配置信息:');
+log('info', `   端口：${PORT}`);
+log('info', `   OpenClaw 路径：${OPENCLAW.basePath}`);
+log('info', `   Agents 路径：${OPENCLAW.agentsPath}`);
+log('info', `   日志路径：${LOG_PATH}`);
+log('info', `   日志级别：${LOG_LEVEL}`);
 
 /**
  * 执行 OpenClaw CLI 命令（带缓存）
@@ -88,13 +98,13 @@ function runOpenClawCommand(command) {
     });
     return JSON.parse(output);
   } catch (error) {
-    console.error(`[CLI] 命令失败：${command}`, error.message);
+    log('error', `[CLI] 命令失败：${command}`, error.message);
     throw error;
   }
 }
 
 /**
- * 获取会话数据（带缓存）
+ * 获取会话数据（带缓存 + 数据验证）
  */
 function getSessionsData() {
   const now = Date.now();
@@ -105,9 +115,23 @@ function getSessionsData() {
   
   // 缓存失效，重新获取
   const sessionsData = runOpenClawCommand('openclaw sessions --json');
-  sessionsCache = sessionsData;
+  
+  // 数据验证：过滤无效会话
+  if (sessionsData.sessions && Array.isArray(sessionsData.sessions)) {
+    const validSessions = sessionsData.sessions.filter(validateSessionData);
+    const invalidCount = sessionsData.sessions.length - validSessions.length;
+    
+    if (invalidCount > 0) {
+      log('warn', `[数据验证] 过滤 ${invalidCount} 个无效会话`);
+    }
+    
+    sessionsCache = { ...sessionsData, sessions: validSessions };
+  } else {
+    sessionsCache = sessionsData;
+  }
+  
   cacheTimestamp = now;
-  return sessionsData;
+  return sessionsCache;
 }
 
 /**
@@ -192,7 +216,7 @@ app.get('/api/subagents/list', (req, res) => {
       recent: recent,
     });
   } catch (error) {
-    console.error('[API] 获取子 Agent 列表失败:', error.message);
+    log('error', '[API] 获取子 Agent 列表失败:', error.message);
     res.status(500).json({ 
       error: '获取数据失败',
       details: error.message,
@@ -233,7 +257,7 @@ app.get('/api/sessions/list', (req, res) => {
       total: sessions.length,
     });
   } catch (error) {
-    console.error('[API] 获取会话列表失败:', error.message);
+    log('error', '[API] 获取会话列表失败:', error.message);
     res.status(500).json({ 
       error: '获取数据失败',
       details: error.message,
@@ -295,7 +319,7 @@ app.get('/api/stats', (req, res) => {
     
     res.json(result);
   } catch (error) {
-    console.error('[API] 获取统计数据失败:', error.message);
+    log('error', '[API] 获取统计数据失败:', error.message);
     res.status(500).json({ 
       error: '获取数据失败',
       details: error.message,
@@ -322,6 +346,19 @@ app.get('/api/health', (req, res) => {
 let traceCache = null;
 let traceCacheTime = 0;
 const TRACE_CACHE_TTL = 30000; // 优化：20s → 30 秒缓存
+
+/**
+ * 数据验证：会话数据
+ */
+function validateSessionData(session) {
+  if (!session) return false;
+  if (!session.id && !session.sessionId) return false;
+  if (session.totalTokens !== undefined && session.totalTokens < 0) return false;
+  if (session.ageMs !== undefined && session.ageMs < 0) return false;
+  if (session.inputTokens !== undefined && session.inputTokens < 0) return false;
+  if (session.outputTokens !== undefined && session.outputTokens < 0) return false;
+  return true;
+}
 
 /**
  * 从 JSONL 文件提取第一条消息作为任务描述
@@ -476,7 +513,7 @@ app.get('/api/trace/flow', (req, res) => {
     
     res.json(result);
   } catch (error) {
-    console.error('[API] 获取执行流程失败:', error.message);
+    log('error', '[API] 获取执行流程失败:', error.message);
     res.status(500).json({ 
       error: '获取数据失败',
       details: error.message,
@@ -526,7 +563,7 @@ app.get('/api/analytics/token-trends', (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Token 趋势 API 错误:', error.message);
+    log('error', 'Token 趋势 API 错误:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -586,7 +623,7 @@ app.get('/api/analytics/token-history', (req, res) => {
       groupBy,
     });
   } catch (error) {
-    console.error('Token 历史 API 错误:', error.message);
+    log('error', 'Token 历史 API 错误:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -628,7 +665,7 @@ app.get('/api/analytics/token-efficiency', (req, res) => {
       sessionCount,
     });
   } catch (error) {
-    console.error('Token 效率 API 错误:', error.message);
+    log('error', 'Token 效率 API 错误:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -694,7 +731,7 @@ app.get('/api/analytics/cost-estimate', (req, res) => {
       sessionCount: sessions.length,
     });
   } catch (error) {
-    console.error('成本估算 API 错误:', error.message);
+    log('error', '成本估算 API 错误:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -742,7 +779,7 @@ app.get('/api/analytics/session-lifecycle', (req, res) => {
       hourDistribution,
     });
   } catch (error) {
-    console.error('会话生命周期 API 错误:', error.message);
+    log('error', '会话生命周期 API 错误:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -786,7 +823,7 @@ app.get('/api/analytics/session-types', (req, res) => {
       totalSessions: sessions.length,
     });
   } catch (error) {
-    console.error('会话类型 API 错误:', error.message);
+    log('error', '会话类型 API 错误:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -827,7 +864,7 @@ app.get('/api/analytics/failure-analysis', (req, res) => {
       recentFailures,
     });
   } catch (error) {
-    console.error('失败分析 API 错误:', error.message);
+    log('error', '失败分析 API 错误:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -866,7 +903,7 @@ app.get('/api/analytics/model-stats', (req, res) => {
       totalSessions: sessions.length,
     });
   } catch (error) {
-    console.error('模型统计 API 错误:', error.message);
+    log('error', '模型统计 API 错误:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -908,7 +945,7 @@ app.get('/api/analytics/performance-bottleneck', (req, res) => {
         : 0,
     });
   } catch (error) {
-    console.error('性能瓶颈 API 错误:', error.message);
+    log('error', '性能瓶颈 API 错误:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -934,7 +971,7 @@ app.get('/api/analytics/tool-usage', (req, res) => {
       note: '工具调用统计需要从 JSONL 文件解析，后续实现',
     });
   } catch (error) {
-    console.error('工具调用 API 错误:', error.message);
+    log('error', '工具调用 API 错误:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -983,7 +1020,7 @@ app.get('/api/analytics/channels', (req, res) => {
     
     res.json({ channels });
   } catch (error) {
-    console.error('[API] 获取渠道统计失败:', error.message);
+    log('error', '[API] 获取渠道统计失败:', error.message);
     res.status(500).json({ 
       error: '获取数据失败',
       details: error.message,
@@ -1044,7 +1081,7 @@ app.get('/api/analytics/channel-detail', (req, res) => {
       totalChannels: channels.length,
     });
   } catch (error) {
-    console.error('渠道详细分析 API 错误:', error.message);
+    log('error', '渠道详细分析 API 错误:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -1103,7 +1140,7 @@ app.get('/api/analytics/subagent-stats', (req, res) => {
       totalSessions: sessions.length,
     });
   } catch (error) {
-    console.error('子 Agent 统计 API 错误:', error.message);
+    log('error', '子 Agent 统计 API 错误:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -1133,7 +1170,7 @@ app.get('/api/trace/subagents', (req, res) => {
     
     res.json({ subagents: subAgentLinks });
   } catch (error) {
-    console.error('[API] 获取子 Agent 链路失败:', error.message);
+    log('error', '[API] 获取子 Agent 链路失败:', error.message);
     res.status(500).json({ 
       error: '获取数据失败',
       details: error.message,
@@ -1260,7 +1297,7 @@ app.get('/api/trace/relationships', (req, res) => {
     
     res.json({ nodes, edges });
   } catch (error) {
-    console.error('[API] 获取调用关系失败:', error.message);
+    log('error', '[API] 获取调用关系失败:', error.message);
     res.status(500).json({ 
       error: '获取数据失败',
       details: error.message,
@@ -1278,7 +1315,7 @@ app.get('/api/trace/relationships', (req, res) => {
 app.get('/api/sessions/:sessionId/history', async (req, res) => {
   try {
     const requestedId = req.params.sessionId;
-    console.log(`[API] 请求会话历史：${requestedId}`);
+    log('info', `[API] 请求会话历史：${requestedId}`);
     
     // 1. 从 sessions.json 查找对应的 jsonl 文件路径
     const sessionsIndexPath = path.join(OPENCLAW.agentsPath, 'main/sessions/sessions.json');
@@ -1389,12 +1426,12 @@ app.get('/api/sessions/:sessionId/history', async (req, res) => {
           history.push(message);
         }
       } catch (parseError) {
-        console.warn(`[API] 解析 JSONL 行失败：${parseError.message}`);
+        log('warn', `[API] 解析 JSONL 行失败：${parseError.message}`);
         // 跳过无法解析的行
       }
     }
     
-    console.log(`[API] 返回会话历史：${history.length} 条消息，${toolCalls.length} 个工具调用`);
+    log('info', `[API] 返回会话历史：${history.length} 条消息，${toolCalls.length} 个工具调用`);
     
     res.json({ 
       history,
@@ -1406,7 +1443,7 @@ app.get('/api/sessions/:sessionId/history', async (req, res) => {
       totalLines: lines.length,
     });
   } catch (error) {
-    console.error('[API] 获取会话历史失败:', error.message);
+    log('error', '[API] 获取会话历史失败:', error.message);
     res.status(500).json({ 
       error: '获取数据失败',
       details: error.message,
@@ -1457,7 +1494,7 @@ function scanDirectory(dirPath, relativePath = '', maxDepth = 3, currentDepth = 
       }
     }
   } catch (error) {
-    console.error(`扫描目录失败 ${dirPath}:`, error.message);
+    log('error', `扫描目录失败 ${dirPath}:`, error.message);
   }
   
   return files;
@@ -1573,11 +1610,11 @@ app.get('/api/agents/config/list', (req, res) => {
     result.skills.sort((a, b) => a.name.localeCompare(b.name));
     
     res.json(result);
-    console.log('[API] 返回配置列表 - Agents:', result.agents.length, 
+    log('info', '[API] 返回配置列表 - Agents:', result.agents.length, 
                 'Workspace:', result.workspace.length, 
                 'Skills:', result.skills.length);
   } catch (error) {
-    console.error('[API] 获取配置列表失败:', error.message);
+    log('error', '[API] 获取配置列表失败:', error.message);
     res.status(500).json({ 
       error: '获取数据失败',
       details: error.message,
@@ -1610,7 +1647,7 @@ app.get('/api/file/read', (req, res) => {
       });
     }
     
-    console.log(`[API] 读取文件：${filePath}`);
+    log('info', `[API] 读取文件：${filePath}`);
     
     // 检查文件是否存在
     if (!fs.existsSync(filePath)) {
@@ -1641,7 +1678,7 @@ app.get('/api/file/read', (req, res) => {
       type: getFileType(path.extname(filePath)),
     });
   } catch (error) {
-    console.error('[API] 读取文件失败:', error.message);
+    log('error', '[API] 读取文件失败:', error.message);
     res.status(500).json({ 
       error: '读取失败',
       details: error.message,
@@ -1674,7 +1711,7 @@ app.put('/api/file/save', (req, res) => {
       });
     }
     
-    console.log(`[API] 保存文件：${filePath} (${content.length} bytes)`);
+    log('info', `[API] 保存文件：${filePath} (${content.length} bytes)`);
     
     // 写入文件
     fs.writeFileSync(filePath, content, 'utf-8');
@@ -1686,7 +1723,7 @@ app.put('/api/file/save', (req, res) => {
       size: content.length,
     });
   } catch (error) {
-    console.error('[API] 保存文件失败:', error.message);
+    log('error', '[API] 保存文件失败:', error.message);
     res.status(500).json({ 
       error: '保存失败',
       details: error.message,
@@ -1728,7 +1765,7 @@ app.get('/api/logs/list', (req, res) => {
     
     res.json({ logs });
   } catch (error) {
-    console.error('[API] 获取日志列表失败:', error.message);
+    log('error', '[API] 获取日志列表失败:', error.message);
     res.status(500).json({ 
       error: '获取日志列表失败',
       details: error.message,
@@ -1792,7 +1829,7 @@ app.get('/api/logs/read', (req, res) => {
       hasMore: filteredLines.length > parseInt(lines),
     });
   } catch (error) {
-    console.error('[API] 读取日志失败:', error.message);
+    log('error', '[API] 读取日志失败:', error.message);
     res.status(500).json({ 
       error: '读取日志失败',
       details: error.message,
@@ -1853,7 +1890,7 @@ app.get('/api/gateway-logs', async (req, res) => {
       total: logLines.length,
     });
   } catch (error) {
-    console.error('[API] 获取 Gateway 日志失败:', error.message);
+    log('error', '[API] 获取 Gateway 日志失败:', error.message);
     res.json({
       success: true,
       source: 'gateway',
@@ -1882,11 +1919,11 @@ const logProcesses = new Map();
 const sessionWatchers = new Map();
 
 io.on('connection', (socket) => {
-  console.log('[WS] 客户端连接:', socket.id);
+  log('info', '[WS] 客户端连接:', socket.id);
   
   // ========== Gateway 日志 ==========
   socket.on('subscribe:gateway-logs', () => {
-    console.log('[WS] 客户端订阅 Gateway 日志:', socket.id);
+    log('info', '[WS] 客户端订阅 Gateway 日志:', socket.id);
     
     // 如果已有进程，直接发送缓存
     if (gatewayLogsCache.lines.length > 0) {
@@ -1925,11 +1962,11 @@ io.on('connection', (socket) => {
     });
     
     logProcess.stderr.on('data', (data) => {
-      console.error('[WS] 日志进程错误:', data.toString());
+      log('error', '[WS] 日志进程错误:', data.toString());
     });
     
     logProcess.on('error', (error) => {
-      console.error('[WS] 日志进程异常:', error.message);
+      log('error', '[WS] 日志进程异常:', error.message);
       socket.emit('log:error', { 
         source: 'gateway', 
         error: error.message 
@@ -1937,14 +1974,14 @@ io.on('connection', (socket) => {
     });
     
     logProcess.on('close', (code) => {
-      console.log('[WS] 日志进程退出:', code);
+      log('info', '[WS] 日志进程退出:', code);
       logProcesses.delete(socket.id);
     });
   });
   
   // ========== 会话历史 WebSocket ==========
   socket.on('subscribe:session-history', async ({ sessionId }) => {
-    console.log('[WS] 客户端订阅会话历史:', sessionId, socket.id);
+    log('info', '[WS] 客户端订阅会话历史:', sessionId, socket.id);
     
     try {
       // 1. 先发送完整历史（复用现有 API 逻辑）
@@ -2097,7 +2134,7 @@ io.on('connection', (socket) => {
                 }
               }
             } catch (error) {
-              console.error('[WS] 读取会话文件失败:', error.message);
+              log('error', '[WS] 读取会话文件失败:', error.message);
             }
           }, 100); // 延迟 100ms，确保文件写入完成
         }
@@ -2107,7 +2144,7 @@ io.on('connection', (socket) => {
       sessionWatchers.set(socket.id, { sessionId: sessionKey, watcher, jsonlPath });
       
     } catch (error) {
-      console.error('[WS] 订阅会话历史失败:', error.message);
+      log('error', '[WS] 订阅会话历史失败:', error.message);
       socket.emit('session-history:error', {
         error: error.message,
       });
@@ -2120,7 +2157,7 @@ io.on('connection', (socket) => {
     if (watcher) {
       watcher.watcher.close();
       sessionWatchers.delete(socket.id);
-      console.log('[WS] 客户端取消订阅会话历史:', watcher.sessionId);
+      log('info', '[WS] 客户端取消订阅会话历史:', watcher.sessionId);
     }
   });
   
@@ -2130,13 +2167,13 @@ io.on('connection', (socket) => {
     if (process) {
       process.kill();
       logProcesses.delete(socket.id);
-      console.log('[WS] 客户端取消订阅:', socket.id);
+      log('info', '[WS] 客户端取消订阅:', socket.id);
     }
   });
   
   // ========== 会话状态实时更新 ==========
   socket.on('subscribe:session-status', () => {
-    console.log('[WS] 客户端订阅会话状态:', socket.id);
+    log('info', '[WS] 客户端订阅会话状态:', socket.id);
     
     // 发送当前会话列表
     try {
@@ -2146,13 +2183,13 @@ io.on('connection', (socket) => {
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('[WS] 发送初始会话状态失败:', error.message);
+      log('error', '[WS] 发送初始会话状态失败:', error.message);
     }
   });
   
   // 断开连接
   socket.on('disconnect', () => {
-    console.log('[WS] 客户端断开:', socket.id);
+    log('info', '[WS] 客户端断开:', socket.id);
     // 清理 Gateway 日志进程
     const process = logProcesses.get(socket.id);
     if (process) {
@@ -2196,7 +2233,7 @@ app.post('/api/sessions/stop', async (req, res) => {
       note: '会话管理功能将在未来版本中支持'
     });
   } catch (error) {
-    console.error('[API] 停止会话失败:', error.message);
+    log('error', '[API] 停止会话失败:', error.message);
     res.status(500).json({ 
       success: false, 
       error: `停止会话失败：${error.message}` 
@@ -2213,22 +2250,22 @@ const sessionStatusInterval = setInterval(() => {
       timestamp: Date.now(),
     });
   } catch (error) {
-    console.error('[WS] 推送会话状态更新失败:', error.message);
+    log('error', '[WS] 推送会话状态更新失败:', error.message);
   }
 }, 30000); // 30 秒推送一次
 
 httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Agent 监控平台 API 服务已启动`);
-  console.log(`📡 监听端口：http://0.0.0.0:${PORT}`);
-  console.log(`🔌 WebSocket 已启用 (Socket.io)`);
-  console.log(`📊 可用端点:`);
-  console.log(`   GET /api/subagents/list - 获取子 Agent 列表`);
-  console.log(`   GET /api/sessions/list  - 获取会话列表`);
-  console.log(`   GET /api/stats          - 获取统计数据`);
-  console.log(`   GET /api/health         - 健康检查`);
-  console.log(`   POST /api/sessions/stop - 停止会话`);
-  console.log(`   POST /api/sessions/restart - 重启会话`);
-  console.log(`   WS /                    - WebSocket 实时日志`);
-  console.log(`💡 当前使用 **真实数据** (OpenClaw CLI)`);
-  console.log(`🌐 可从外部访问（需要防火墙开放端口）`);
+  log('info', `🚀 Agent 监控平台 API 服务已启动`);
+  log('info', `📡 监听端口：http://0.0.0.0:${PORT}`);
+  log('info', `🔌 WebSocket 已启用 (Socket.io)`);
+  log('info', `📊 可用端点:`);
+  log('info', `   GET /api/subagents/list - 获取子 Agent 列表`);
+  log('info', `   GET /api/sessions/list  - 获取会话列表`);
+  log('info', `   GET /api/stats          - 获取统计数据`);
+  log('info', `   GET /api/health         - 健康检查`);
+  log('info', `   POST /api/sessions/stop - 停止会话`);
+  log('info', `   POST /api/sessions/restart - 重启会话`);
+  log('info', `   WS /                    - WebSocket 实时日志`);
+  log('info', `💡 当前使用 **真实数据** (OpenClaw CLI)`);
+  log('info', `🌐 可从外部访问（需要防火墙开放端口）`);
 });
