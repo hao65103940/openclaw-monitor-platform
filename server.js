@@ -815,27 +815,21 @@ app.get('/api/logs/list', (req, res) => {
         .filter(f => f.endsWith('.log'))
         .map(f => {
           const stat = fs.statSync(path.join(logsPath, f));
-          return {
+          const logEntry = {
             name: f,
             path: path.join(logsPath, f),
             size: stat.size,
             modified: stat.mtime,
           };
+          
+          // 为 server.log 添加标签
+          if (f === 'server.log') {
+            logEntry.label = '后端服务日志';
+          }
+          
+          return logEntry;
         });
       logs.push(...files);
-    }
-    
-    // 添加 server.log（主日志）
-    const serverLogPath = path.join(LOG_PATH, 'server.log');
-    if (fs.existsSync(serverLogPath)) {
-      const stat = fs.statSync(serverLogPath);
-      logs.push({
-        name: 'server.log',
-        path: serverLogPath,
-        size: stat.size,
-        modified: stat.mtime,
-        label: '后端服务日志',
-      });
     }
     
     res.json({ logs });
