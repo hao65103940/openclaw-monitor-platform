@@ -131,9 +131,11 @@ function getAllAgentsSessions() {
             const stats = fs.statSync(filePath);
             const sessionId = file.replace('.jsonl', '');
             
-            // 从 JSONL 文件最后一行读取最终统计（包含 tokenUsage）
+            // 从 JSONL 文件读取首行（创建时间）和末行（统计数据）
             try {
+              const firstLine = execSync(`head -1 "${filePath}"`, { encoding: 'utf-8' });
               const lastLine = execSync(`tail -1 "${filePath}"`, { encoding: 'utf-8' });
+              const firstEntry = JSON.parse(firstLine);
               const lastEntry = JSON.parse(lastLine);
               
               // 提取会话类型（从 sessionKey 或 cwd）
@@ -156,6 +158,11 @@ function getAllAgentsSessions() {
               const inputTokens = usage.input || usage.inputTokens || 0;
               const outputTokens = usage.output || usage.outputTokens || 0;
               
+              // 计算会话时长（从第一行 timestamp 到最后修改时间）
+              const updatedAt = stats.mtimeMs;
+              const createdAt = firstEntry.timestamp ? new Date(firstEntry.timestamp).getTime() : updatedAt;
+              const ageMs = updatedAt - createdAt;
+              
               allSessions.push({
                 sessionId: sessionId,
                 key: `agent:${agentId}:${sessionType}:${sessionId}`,
@@ -164,8 +171,9 @@ function getAllAgentsSessions() {
                 totalTokens: totalTokens,
                 inputTokens: inputTokens,
                 outputTokens: outputTokens,
-                updatedAt: stats.mtimeMs,
-                ageMs: stats.mtimeMs - (lastEntry.timestamp ? new Date(lastEntry.timestamp).getTime() : stats.mtimeMs),
+                updatedAt: updatedAt,
+                createdAt: createdAt,
+                ageMs: ageMs,
               });
             } catch (error) {
               log('debug', `[多 Agent] 读取 ${agentId}/${file} 元数据失败:`, error.message);
@@ -260,14 +268,20 @@ function formatAgent(session, label) {
 }
 
 /**
- * 格式化时长
+ * 格式化时长（动态单位：ms/s/m/h）
  */
 function formatDuration(ms) {
-  if (ms < 1000) return `${ms}ms`;
+  if (!ms || ms <= 0) return '-';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  const minutes = Math.floor(ms / 60000);
-  const seconds = Math.floor((ms % 60000) / 1000);
-  return `${minutes}m ${seconds}s`;
+  if (ms < 3600000) {
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}m ${seconds}s`;
+  }
+  const hours = Math.floor(ms / 3600000);
+  const minutes = Math.floor((ms % 3600000) / 60000);
+  return `${hours}h ${minutes}m`;
 }
 
 /**
@@ -358,7 +372,7 @@ app.get('/api/sessions/list', (req, res) => {
         sessionId: s.sessionId || s.key,
         sessionKey: s.key,
         label: s.key || `${s.agentId}:${s.sessionId}`,
-        createdAt: s.updatedAt - (s.ageMs || 0),
+        createdAt: s.createdAt || (s.updatedAt - (s.ageMs || 0)),
         updatedAt: s.updatedAt,
         messageCount: 0,
         agentId: s.agentId || 'main',
@@ -370,6 +384,9 @@ app.get('/api/sessions/list', (req, res) => {
         outputTokens: s.outputTokens || 0,
         contextTokens: s.contextTokens || 0,
         kind: s.kind || 'direct',
+        ageMs: s.ageMs || 0,
+        runtimeMs: s.ageMs || 0,
+        runtime: formatDuration(s.ageMs || 0),
       })),
       total: uniqueSessions.length,
     });
@@ -2101,19 +2118,37 @@ io.on('connection', (socket) => {
     log('info', '[WS] 客户端订阅会话历史:', sessionId, socket.id);
     
     try {
-      // 1. 先发送完整历史（复用现有 API 逻辑）
-      const sessionsIndexPath = path.join(OPENCLAW.agentsPath, 'main/sessions/sessions.json');
-      const sessionsIndex = JSON.parse(fs.readFileSync(sessionsIndexPath, 'utf-8'));
+      // 1. 从所有 Agent 目录查找会话
+      let sessionInfo = null;
+      let agentId = 'main';
       
-      // 查找 session（支持 sessionKey 和 UUID）
-      let sessionInfo = sessionsIndex[sessionId];
-      let sessionKey = sessionId;
+      const agentDirs = fs.readdirSync(OPENCLAW.agentsPath, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory() && !dirent.name.startsWith('.'))
+        .map(dirent => dirent.name);
       
+      for (const dir of agentDirs) {
+        const sessionsIndexPath = path.join(OPENCLAW.agentsPath, dir, 'sessions', 'sessions.json');
+        if (fs.existsSync(sessionsIndexPath)) {
+          try {
+            const sessionsIndex = JSON.parse(fs.readFileSync(sessionsIndexPath, 'utf-8'));
+            if (sessionsIndex && sessionsIndex[sessionId]) {
+              sessionInfo = sessionsIndex[sessionId];
+              agentId = dir;
+              break;
+            }
+          } catch (e) {
+            // sessions.json 可能为空，继续查找
+          }
+        }
+      }
+      
+      // 如果 sessions.json 找不到，直接查找 JSONL 文件
       if (!sessionInfo) {
-        for (const [key, info] of Object.entries(sessionsIndex)) {
-          if (info.sessionId === sessionId) {
-            sessionInfo = info;
-            sessionKey = key;
+        for (const dir of agentDirs) {
+          const jsonlPath = path.join(OPENCLAW.agentsPath, dir, 'sessions', `${sessionId}.jsonl`);
+          if (fs.existsSync(jsonlPath)) {
+            sessionInfo = { sessionId };
+            agentId = dir;
             break;
           }
         }
@@ -2128,7 +2163,7 @@ io.on('connection', (socket) => {
       }
       
       // 2. 读取 JSONL 文件，发送初始历史
-      const jsonlPath = `/root/.openclaw/agents/main/sessions/${sessionInfo.sessionId}.jsonl`;
+      const jsonlPath = path.join(OPENCLAW.agentsPath, agentId, 'sessions', `${sessionInfo.sessionId}.jsonl`);
       const content = fs.readFileSync(jsonlPath, 'utf-8');
       const lines = content.split('\n').filter(line => line.trim());
       

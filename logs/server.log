@@ -1,4 +1,4 @@
-[dotenv@17.3.1] injecting env (13) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.3.1] injecting env (13) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
 ⚙️  配置信息:
    端口：3001
    OpenClaw 路径：/root/.openclaw
@@ -19,4 +19,3 @@
 💡 当前使用 **真实数据** (OpenClaw CLI)
 🌐 可从外部访问（需要防火墙开放端口）
 [多 Agent] 从 7 个 Agent 读取 19 个会话
-[数据验证] 过滤 14 个无效会话
