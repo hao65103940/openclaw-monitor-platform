@@ -20,5 +20,10 @@
     "allowedBasePaths": [
       "/root/.openclaw"
     ]
+  },
+  "github": {
+    "username": "hao65103940",
+    "repository": "openclaw-monitor-platform",
+    "tokenNote": "Token stored in .env file (GITHUB_TOKEN) - DO NOT COMMIT .env"
   }
 }
