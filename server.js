@@ -530,6 +530,174 @@ app.get('/api/analytics/token-trends', (req, res) => {
 });
 
 /**
+ * GET /api/analytics/token-history
+ * Token 使用历史（时间序列）
+ */
+app.get('/api/analytics/token-history', (req, res) => {
+  try {
+    const range = req.query.range || '7d';
+    const groupBy = req.query.groupBy || 'day';
+    
+    const sessionsData = getSessionsData();
+    const sessions = sessionsData.sessions || [];
+    
+    // 计算时间范围
+    const now = Date.now();
+    const rangeMs = range === '7d' ? 7 * 24 * 60 * 60 * 1000 :
+                    range === '30d' ? 30 * 24 * 60 * 60 * 1000 :
+                    range === '90d' ? 90 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+    const startTime = now - rangeMs;
+    
+    // 按日期分组统计
+    const dateMap = new Map();
+    sessions.forEach(s => {
+      if (s.updatedAt >= startTime) {
+        const date = new Date(s.updatedAt);
+        const dateKey = groupBy === 'day' ? date.toISOString().split('T')[0] :
+                       groupBy === 'week' ? `${date.getFullYear()}-W${Math.ceil(date.getDate() / 7)}` :
+                       `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        
+        if (!dateMap.has(dateKey)) {
+          dateMap.set(dateKey, { date: dateKey, inputTokens: 0, outputTokens: 0, contextTokens: 0, totalTokens: 0, count: 0 });
+        }
+        
+        const data = dateMap.get(dateKey);
+        data.inputTokens += s.inputTokens || 0;
+        data.outputTokens += s.outputTokens || 0;
+        data.contextTokens += s.contextTokens || 0;
+        data.totalTokens += s.totalTokens || 0;
+        data.count += 1;
+      }
+    });
+    
+    // 转换为数组并排序
+    const timeline = Array.from(dateMap.values())
+      .sort((a, b) => a.date.localeCompare(b.date));
+    
+    res.json({
+      success: true,
+      timeline,
+      range,
+      groupBy,
+    });
+  } catch (error) {
+    console.error('Token 历史 API 错误:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/analytics/token-efficiency
+ * Token 效率分析
+ */
+app.get('/api/analytics/token-efficiency', (req, res) => {
+  try {
+    const sessionsData = getSessionsData();
+    const sessions = sessionsData.sessions || [];
+    
+    const totalTokens = sessions.reduce((sum, s) => sum + (s.totalTokens || 0), 0);
+    const totalRuntime = sessions.reduce((sum, s) => sum + (s.runtimeMs || 0), 0);
+    const sessionCount = sessions.length;
+    
+    // Top 10 高消耗会话
+    const topSessions = [...sessions]
+      .filter(s => s.totalTokens > 0)
+      .sort((a, b) => (b.totalTokens || 0) - (a.totalTokens || 0))
+      .slice(0, 10)
+      .map(s => ({
+        id: s.id,
+        label: s.key || s.sessionId || '未知',
+        totalTokens: s.totalTokens || 0,
+        runtimeMs: s.runtimeMs || 0,
+      }));
+    
+    res.json({
+      success: true,
+      avgTokensPerSession: sessionCount > 0 ? Math.round(totalTokens / sessionCount) : 0,
+      tokenRate: totalRuntime > 0 ? Math.round((totalTokens / totalRuntime) * 1000) : 0, // Token/小时
+      topSessions,
+      totalTokens,
+      sessionCount,
+    });
+  } catch (error) {
+    console.error('Token 效率 API 错误:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/analytics/cost-estimate
+ * 成本估算
+ */
+app.get('/api/analytics/cost-estimate', (req, res) => {
+  try {
+    const sessionsData = getSessionsData();
+    const sessions = sessionsData.sessions || [];
+    
+    // 模型定价（每 1M tokens，USD）
+    const pricing = {
+      'qwen3.5-plus': { input: 0.004, output: 0.012 },
+      'qwen3-coder-plus': { input: 0.004, output: 0.012 },
+      'qwen3-coder-next': { input: 0.002, output: 0.006 },
+      'glm-4.7': { input: 0.001, output: 0.001 },
+      'glm-5': { input: 0.005, output: 0.02 },
+      'default': { input: 0.002, output: 0.006 },
+    };
+    
+    let totalCost = 0;
+    const modelCosts = [];
+    
+    sessions.forEach(s => {
+      const model = s.model || 'default';
+      const price = pricing[model] || pricing['default'];
+      const inputCost = ((s.inputTokens || 0) / 1000000) * price.input;
+      const outputCost = ((s.outputTokens || 0) / 1000000) * price.output;
+      const sessionCost = inputCost + outputCost;
+      
+      totalCost += sessionCost;
+      
+      const existing = modelCosts.find(m => m.model === model);
+      if (existing) {
+        existing.cost += sessionCost;
+        existing.tokens += s.totalTokens || 0;
+      } else {
+        modelCosts.push({
+          model,
+          cost: sessionCost,
+          tokens: s.totalTokens || 0,
+        });
+      }
+    });
+    
+    // 估算月度成本（基于当前数据）
+    const now = Date.now();
+    const oldestSession = sessions.reduce((min, s) => Math.min(min, s.updatedAt), now);
+    const daysElapsed = Math.max(1, (now - oldestSession) / (24 * 60 * 60 * 1000));
+    const estimatedMonthlyCost = (totalCost / daysElapsed) * 30;
+    
+    res.json({
+      success: true,
+      totalCost,
+      estimatedMonthlyCost,
+      modelCosts: modelCosts.sort((a, b) => b.cost - a.cost),
+      sessionCount: sessions.length,
+    });
+  } catch (error) {
+    console.error('成本估算 API 错误:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
  * GET /api/analytics/channels
  * 渠道统计
  */
