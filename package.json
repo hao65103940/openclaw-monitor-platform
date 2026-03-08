@@ -1,8 +1,9 @@
 {
-  "name": "agent-monitor-platform",
+  "name": "claweye",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
+  "description": "ClawEye - AI Agent 监控平台 | 洞察一切 · 掌控全局",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
