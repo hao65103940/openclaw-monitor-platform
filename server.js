@@ -35,9 +35,9 @@ if (fs.existsSync(configPath)) {
 // 从环境变量或配置文件读取配置
 const PORT = parseInt(process.env.PORT || appConfig.server?.port || '3001');
 const HOST = process.env.HOST || appConfig.server?.host || '0.0.0.0';
-const CACHE_TTL = parseInt(process.env.CACHE_TTL || appConfig.server?.cacheTTL || '10000'); // 优化：5s → 10s
-const STATS_CACHE_TTL = 30000; // 统计数据 30 秒缓存
-const SESSIONS_CACHE_TTL = 15000; // 会话列表 15 秒缓存
+const CACHE_TTL = parseInt(process.env.CACHE_TTL || appConfig.server?.cacheTTL || '20000'); // 优化：10s → 20s
+const STATS_CACHE_TTL = 60000; // 优化：统计数据 30s → 60 秒缓存
+const SESSIONS_CACHE_TTL = 30000; // 优化：会话列表 15s → 30 秒缓存
 
 // OpenClaw 路径配置
 const OPENCLAW = {
@@ -316,7 +316,7 @@ app.get('/api/health', (req, res) => {
  */
 let traceCache = null;
 let traceCacheTime = 0;
-const TRACE_CACHE_TTL = 20000; // 20 秒缓存
+const TRACE_CACHE_TTL = 30000; // 优化：20s → 30 秒缓存
 
 /**
  * 从 JSONL 文件提取第一条消息作为任务描述
@@ -1225,7 +1225,7 @@ let gatewayLogsCache = {
   lines: [],
   timestamp: 0,
 };
-const GATEWAY_LOGS_CACHE_TTL = 3000; // 3 秒缓存
+const GATEWAY_LOGS_CACHE_TTL = 5000; // 优化：3s → 5 秒缓存（Gateway 日志需要更实时）
 
 app.get('/api/gateway-logs', async (req, res) => {
   try {
