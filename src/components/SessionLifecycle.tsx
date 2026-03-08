@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
+import * as echarts from 'echarts/core';
 
 interface SessionLifecycleData {
   success: boolean;

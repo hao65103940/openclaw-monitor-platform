@@ -136,7 +136,7 @@ export default function SessionTypes() {
 
         {/* 类型列表 */}
         <div className="space-y-3">
-          {data.types.map((type, index) => (
+          {data.types.map((type) => (
             <div
               key={type.type}
               className="flex items-center justify-between p-3 bg-gray-700 rounded-lg"
