@@ -16,3 +16,11 @@
    WS /                    - WebSocket 实时日志
 💡 当前使用 **真实数据** (OpenClaw CLI)
 🌐 可从外部访问（需要防火墙开放端口）
+[WS] 客户端连接: 3uDFzmMcsfGoGWHrAAAB
+[WS] 客户端订阅会话历史: agent:main:main 3uDFzmMcsfGoGWHrAAAB
+[WS] 客户端取消订阅会话历史: agent:main:main
+[WS] 客户端断开: 3uDFzmMcsfGoGWHrAAAB
+[WS] 客户端连接: Dac9yAndnv7z039BAAAD
+[WS] 客户端订阅会话历史: agent:main:cron:7c450201-d3c4-41bf-bd2b-9e2955cb7b3f Dac9yAndnv7z039BAAAD
+[WS] 客户端取消订阅会话历史: agent:main:cron:7c450201-d3c4-41bf-bd2b-9e2955cb7b3f
+[WS] 客户端断开: Dac9yAndnv7z039BAAAD

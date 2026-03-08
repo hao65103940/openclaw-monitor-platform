@@ -182,6 +182,16 @@ function Trace() {
     return names[agentId] || agentId;
   }
 
+  function formatKind(kind: string): string {
+    const kinds: Record<string, string> = {
+      'direct': '直接会话',
+      'group': '群组会话',
+      'cron': '定时任务',
+      'subagent': '子 Agent',
+    };
+    return kinds[kind] || kind;
+  }
+
   function formatChannel(channel: string): string {
     const channels: Record<string, string> = {
       'feishu': '飞书 📝',
