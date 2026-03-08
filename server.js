@@ -49,7 +49,7 @@ const OPENCLAW = {
 };
 
 // 日志路径
-const LOG_PATH = process.env.LOG_PATH || appConfig.server?.logPath || '/root/.openclaw/monitor-platform/logs';
+const LOG_PATH = process.env.LOG_PATH || appConfig.server?.logPath || '/root/.openclaw/claweye/logs';
 
 // 安全配置
 const ALLOWED_BASE_PATHS = (process.env.ALLOWED_BASE_PATHS || appConfig.security?.allowedBasePaths || '/root/.openclaw').split(',');
