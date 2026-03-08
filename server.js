@@ -1145,18 +1145,34 @@ io.on('connection', (socket) => {
       const content = fs.readFileSync(jsonlPath, 'utf-8');
       const lines = content.split('\n').filter(line => line.trim());
       
-      // 解析最后 100 条消息
+      // 解析最后 100 条消息和工具调用
       const initialMessages = [];
+      const initialToolCalls = [];
       const startIndex = Math.max(0, lines.length - 100);
       
       for (let i = startIndex; i < lines.length; i++) {
         try {
           const record = JSON.parse(lines[i]);
+          
+          // 消息
           if (record.type === 'message' && record.message) {
             initialMessages.push({
               role: record.message.role,
               content: record.message.content,
               timestamp: new Date(record.timestamp).getTime(),
+            });
+          }
+          
+          // 工具调用（从 toolCalls 字段或 message.toolCalls 中获取）
+          if (record.toolCalls && Array.isArray(record.toolCalls)) {
+            record.toolCalls.forEach((tool: any) => {
+              initialToolCalls.push({
+                name: tool.name || tool.tool,
+                args: tool.args || tool.input,
+                result: tool.result,
+                timestamp: new Date(record.timestamp).getTime(),
+                status: 'success',
+              });
             });
           }
         } catch (e) {
@@ -1168,6 +1184,7 @@ io.on('connection', (socket) => {
         sessionId: sessionKey,
         actualSessionId: sessionInfo.sessionId,
         messages: initialMessages,
+        toolCalls: initialToolCalls,
         total: lines.length,
       });
       
@@ -1183,9 +1200,12 @@ io.on('connection', (socket) => {
               // 只发送新增的行
               if (newLines.length > lines.length) {
                 const newMessages = [];
+                const newToolCalls = [];
                 for (let i = lines.length; i < newLines.length; i++) {
                   try {
                     const record = JSON.parse(newLines[i]);
+                    
+                    // 消息
                     if (record.type === 'message' && record.message) {
                       newMessages.push({
                         role: record.message.role,
@@ -1193,14 +1213,28 @@ io.on('connection', (socket) => {
                         timestamp: new Date(record.timestamp).getTime(),
                       });
                     }
+                    
+                    // 工具调用
+                    if (record.toolCalls && Array.isArray(record.toolCalls)) {
+                      record.toolCalls.forEach((tool: any) => {
+                        newToolCalls.push({
+                          name: tool.name || tool.tool,
+                          args: tool.args || tool.input,
+                          result: tool.result,
+                          timestamp: new Date(record.timestamp).getTime(),
+                          status: 'success',
+                        });
+                      });
+                    }
                   } catch (e) {
                     // 跳过解析失败的行
                   }
                 }
                 
-                if (newMessages.length > 0) {
+                if (newMessages.length > 0 || newToolCalls.length > 0) {
                   socket.emit('session-history:new', {
                     messages: newMessages,
+                    toolCalls: newToolCalls,
                     timestamp: Date.now(),
                   });
                 }

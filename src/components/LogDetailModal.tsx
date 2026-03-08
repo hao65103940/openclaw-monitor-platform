@@ -75,11 +75,24 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
     socket.on('session-history:initial', (data: { 
       sessionId: string; 
       messages: WebSocketMessage[]; 
+      toolCalls?: any[];
       total: number;
     }) => {
       console.log('[WS] 接收初始历史:', data.total, '条消息');
       const parsedLogs = parseMessages(data.messages);
       setLogs(parsedLogs);
+      
+      // 解析工具调用
+      if (data.toolCalls && data.toolCalls.length > 0) {
+        setToolCalls(data.toolCalls.map((tool: any) => ({
+          name: tool.name,
+          args: tool.args,
+          result: tool.result,
+          timestamp: tool.timestamp,
+          status: tool.status as 'success' | 'error',
+        })));
+      }
+      
       setLastUpdateTime(Date.now());
       setLoading(false);
     });
@@ -87,6 +100,7 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
     // 接收新消息
     socket.on('session-history:new', (data: { 
       messages: WebSocketMessage[]; 
+      toolCalls?: any[];
       timestamp: number;
     }) => {
       console.log('[WS] 接收新消息:', data.messages.length, '条');
@@ -101,6 +115,18 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
         }
         return [...prev, ...newLogs];
       });
+      
+      // 新增工具调用
+      if (data.toolCalls && data.toolCalls.length > 0) {
+        setToolCalls(prev => [...prev, ...data.toolCalls!.map((tool: any) => ({
+          name: tool.name,
+          args: tool.args,
+          result: tool.result,
+          timestamp: tool.timestamp,
+          status: tool.status as 'success' | 'error',
+        }))]);
+      }
+      
       setLastUpdateTime(data.timestamp);
     });
 
@@ -149,22 +175,25 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
         entries.push({
           timestamp: msg.timestamp,
           level: 'INFO',
-          message: `👤 用户：${content.substring(0, 100) || '...'}`,
+          message: content,
           type: 'message',
+          details: { role: 'user' },
         });
       } else if (msg.role === 'assistant') {
         entries.push({
           timestamp: msg.timestamp,
           level: 'INFO',
-          message: `🤖 Agent: ${content.substring(0, 100) || '...'}`,
+          message: content,
           type: 'message',
+          details: { role: 'assistant' },
         });
       } else if (msg.role === 'tool' || msg.role === 'toolResult') {
         entries.push({
           timestamp: msg.timestamp,
           level: 'DEBUG',
-          message: `📥 工具结果：${content.substring(0, 100) || '...'}`,
+          message: content,
           type: 'tool',
+          details: { role: 'tool' },
         });
       }
     });
@@ -176,6 +205,15 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
   function togglePause() {
     setIsPaused(!isPaused);
   }
+
+  // 自动滚动到底部（初始加载和新消息到达时）
+  useEffect(() => {
+    if (!loading && logs.length > 0 && logsEndRef.current) {
+      setTimeout(() => {
+        logsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 100);
+    }
+  }, [logs, loading, activeTab]);
 
   async function loadHistory() {
     try {
@@ -190,13 +228,20 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
       // 解析历史消息
       if (response.data.history && response.data.history.length > 0) {
         response.data.history.forEach((msg: any) => {
+          const content = typeof msg.content === 'string' 
+            ? msg.content 
+            : Array.isArray(msg.content)
+              ? msg.content.filter((item: any) => item.type === 'text').map((item: any) => item.text).join('')
+              : '';
+          
           // 用户消息
           if (msg.role === 'user') {
             historyLogs.push({
               timestamp: msg.timestamp || Date.now(),
               level: 'INFO' as const,
-              message: `👤 用户：${msg.content?.substring(0, 100) || '...'}`,
+              message: content,
               type: 'message' as const,
+              details: { role: 'user' },
             });
           }
           
@@ -205,8 +250,9 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
             historyLogs.push({
               timestamp: msg.timestamp || Date.now(),
               level: 'INFO' as const,
-              message: `🤖 Agent: ${msg.content?.substring(0, 100) || '...'}`,
+              message: content,
               type: 'message' as const,
+              details: { role: 'assistant' },
             });
           }
           
@@ -502,27 +548,36 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
               )}
             </div>
           ) : activeTab === 'messages' ? (
-            <div className="space-y-3">
-              {logs.filter(l => l.type === 'message').map((msg, index) => (
-                <div 
-                  key={index} 
-                  className={`p-3 rounded-lg ${
-                    msg.message.includes('👤 用户') 
-                      ? 'bg-blue-900/20 border border-blue-700 ml-8' 
-                      : 'bg-green-900/20 border border-green-700 mr-8'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2 mb-1">
-                    <span className="text-xs text-gray-500">
-                      {dayjs(msg.timestamp).format('HH:mm:ss')}
-                    </span>
-                    <span className="text-xs text-gray-400">{msg.message.split(':')[0]}</span>
+            <div className="space-y-3 overflow-auto max-h-[60vh] p-4">
+              {logs.filter(l => l.type === 'message').map((msg, index) => {
+                const isUser = msg.details?.role === 'user';
+                return (
+                  <div 
+                    key={index} 
+                    className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div 
+                      className={`max-w-[70%] p-3 rounded-lg ${
+                        isUser 
+                          ? 'bg-blue-600 text-white rounded-br-none' 
+                          : 'bg-gray-700 text-gray-100 rounded-bl-none'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2 mb-1">
+                        <span className="text-xs opacity-75">
+                          {isUser ? '👤 你' : '🤖 Agent'}
+                        </span>
+                        <span className="text-xs opacity-50">
+                          {dayjs(msg.timestamp).format('HH:mm:ss')}
+                        </span>
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap break-all">
+                        {msg.message}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-300 break-all">
-                    {msg.message.split(':').slice(1).join(':')}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
               {logs.filter(l => l.type === 'message').length === 0 && (
                 <div className="text-center py-12 text-gray-400">
                   💬 暂无消息记录
