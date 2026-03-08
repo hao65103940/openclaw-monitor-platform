@@ -395,41 +395,41 @@ function Trace() {
       )}
 
       {/* Tab 切换 + 过滤器 */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <h2 className="text-lg font-semibold text-white">🔍 执行追踪</h2>
-            <div className="flex space-x-1 bg-gray-700 rounded-lg p-1">
-              <button
-                onClick={() => setActiveTab('flow')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  activeTab === 'flow'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                📊 执行流程
-              </button>
-              <button
-                onClick={() => setActiveTab('graph')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  activeTab === 'graph'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                🔗 调用关系
-              </button>
-            </div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center space-x-4">
+          <h2 className="text-lg font-semibold text-white">🔍 执行追踪</h2>
+          <div className="flex space-x-1 bg-gray-700 rounded-lg p-1">
+            <button
+              onClick={() => setActiveTab('flow')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'flow'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              📊 执行流程
+            </button>
+            <button
+              onClick={() => setActiveTab('graph')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'graph'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              🔗 调用关系
+            </button>
           </div>
-          
-          {activeTab === 'flow' && (
+        </div>
+        
+        {activeTab === 'flow' && (
+          <div className="flex items-center space-x-2">
             <FilterPanel
               onFilterChange={setAdvancedFilters}
               onReset={() => setAdvancedFilters(null)}
             />
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Tab 内容 */}
