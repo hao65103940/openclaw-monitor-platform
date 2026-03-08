@@ -128,7 +128,8 @@ function Logs() {
         console.error('加载日志失败:', error);
         setLogLines(['❌ 加载失败：' + (error as Error).message]);
       } finally {
-        setLoading(false);
+        // 延迟关闭 loading，避免闪烁
+        setTimeout(() => setLoading(false), 300);
       }
     }
 
@@ -337,14 +338,20 @@ function Logs() {
         {/* 日志容器 - 使用 overflow-auto 限制滚动在容器内 */}
         <div
           ref={containerRef}
-          className="h-[600px] overflow-auto bg-gray-900 p-4 font-mono text-xs"
+          className="h-[600px] overflow-auto bg-gray-900 p-4 font-mono text-xs relative"
           style={{ contain: 'layout style' }}
         >
-          {loading && logLines.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
-              🔄 正在加载日志...
+          {/* 加载动画 */}
+          {loading && (
+            <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center z-10">
+              <div className="text-center">
+                <div className="inline-block animate-spin text-3xl mb-2">🔄</div>
+                <div className="text-gray-300 text-sm">正在加载日志...</div>
+              </div>
             </div>
-          ) : logLines.length === 0 ? (
+          )}
+          
+          {logLines.length === 0 ? (
             <div className="text-center py-8 text-gray-400">
               📭 暂无日志
             </div>
