@@ -114,20 +114,25 @@ function getSessionsData() {
  * 格式化 Agent 数据
  */
 function formatAgent(session, label) {
+  const createdAt = session.updatedAt - (session.ageMs || 0);
+  const updatedAt = session.updatedAt;
+  
   return {
     id: session.sessionKey || session.key || `agent:unknown`,  // 使用 sessionKey（agent:main:main 格式）
     agentId: 'agent:main',
     status: 'done', // 存储的会话都是已完成的
     task: label || '未知任务',
     label: label || '会话',
-    runtimeMs: (session.updatedAt - session.createdAt) || 0,
-    runtime: formatDuration((session.updatedAt - session.createdAt) || 0),
+    runtimeMs: session.ageMs || 0,
+    runtime: formatDuration(session.ageMs || 0),
     model: session.model || 'qwen3.5-plus',
     totalTokens: session.totalTokens || session.tokenUsage?.total || 0,
     inputTokens: session.inputTokens || session.tokenUsage?.input || 0,
     outputTokens: session.outputTokens || session.tokenUsage?.output || 0,
-    startedAt: session.createdAt,
-    endedAt: session.updatedAt,
+    startedAt: createdAt,
+    endedAt: updatedAt,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
   };
 }
 

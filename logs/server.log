@@ -1,4 +1,4 @@
-[dotenv@17.3.1] injecting env (12) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[dotenv@17.3.1] injecting env (12) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
 📋 已加载配置文件：config.json
 ⚙️  配置信息:
    端口：3001
