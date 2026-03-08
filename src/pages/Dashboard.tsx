@@ -164,10 +164,11 @@ function AgentTable({ agents, title, emptyMessage, onViewLog }: {
   );
 }
 
-function PaginatedAgentTable({ agents, title, pageSize = 10, onViewLog }: { 
+function PaginatedAgentTable({ agents, title, pageSize = 10, emptyMessage, onViewLog }: { 
   agents: Agent[]; 
   title: string; 
   pageSize?: number;
+  emptyMessage?: string;
   onViewLog?: (agent: Agent) => void;
 }) {
   const [currentPage, setCurrentPage] = useState(1);
