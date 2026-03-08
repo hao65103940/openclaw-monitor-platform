@@ -1,4 +1,4 @@
-[dotenv@17.3.1] injecting env (12) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.3.1] injecting env (12) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
 📋 已加载配置文件：config.json
 ⚙️  配置信息:
    端口：3001

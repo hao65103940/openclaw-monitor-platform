@@ -434,10 +434,10 @@ function Trace() {
       </div>
 
       {/* Tab 内容 */}
-      {activeTab === 'flow' ? (
+      {activeTab === 'flow' && (
         <>
-      {/* 执行流程图 - 垂直时间线 */}
-      <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+          {/* 执行流程图 - 垂直时间线 */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-700 bg-gray-850 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-white">📊 执行流程时间线</h3>
@@ -888,6 +888,8 @@ function Trace() {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
       
       {/* 调用关系图 Tab */}
