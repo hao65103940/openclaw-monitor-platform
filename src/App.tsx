@@ -36,9 +36,6 @@ function Layout({ children }: { children: React.ReactNode }) {
                 <Link to="/analytics" className="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition-colors">
                   📈 性能分析
                 </Link>
-                <Link to="/analytics" className="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition-colors">
-                  📈 性能分析
-                </Link>
                 <Link to="/configs" className="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition-colors">
                   ⚙️ 配置管理
                 </Link>
