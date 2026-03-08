@@ -1045,11 +1045,13 @@ const io = new Server(httpServer, {
 
 // 存储活跃的日志进程
 const logProcesses = new Map();
+// 存储会话历史监听器
+const sessionWatchers = new Map();
 
 io.on('connection', (socket) => {
   console.log('[WS] 客户端连接:', socket.id);
   
-  // 订阅 Gateway 日志
+  // ========== Gateway 日志 ==========
   socket.on('subscribe:gateway-logs', () => {
     console.log('[WS] 客户端订阅 Gateway 日志:', socket.id);
     
@@ -1107,7 +1109,131 @@ io.on('connection', (socket) => {
     });
   });
   
-  // 取消订阅
+  // ========== 会话历史 WebSocket ==========
+  socket.on('subscribe:session-history', async ({ sessionId }) => {
+    console.log('[WS] 客户端订阅会话历史:', sessionId, socket.id);
+    
+    try {
+      // 1. 先发送完整历史（复用现有 API 逻辑）
+      const sessionsIndexPath = path.join(OPENCLAW.agentsPath, 'main/sessions/sessions.json');
+      const sessionsIndex = JSON.parse(fs.readFileSync(sessionsIndexPath, 'utf-8'));
+      
+      // 查找 session（支持 sessionKey 和 UUID）
+      let sessionInfo = sessionsIndex[sessionId];
+      let sessionKey = sessionId;
+      
+      if (!sessionInfo) {
+        for (const [key, info] of Object.entries(sessionsIndex)) {
+          if (info.sessionId === sessionId) {
+            sessionInfo = info;
+            sessionKey = key;
+            break;
+          }
+        }
+      }
+      
+      if (!sessionInfo || !sessionInfo.sessionId) {
+        socket.emit('session-history:error', { 
+          error: '会话不存在',
+          sessionId,
+        });
+        return;
+      }
+      
+      // 2. 读取 JSONL 文件，发送初始历史
+      const jsonlPath = `/root/.openclaw/agents/main/sessions/${sessionInfo.sessionId}.jsonl`;
+      const content = fs.readFileSync(jsonlPath, 'utf-8');
+      const lines = content.split('\n').filter(line => line.trim());
+      
+      // 解析最后 100 条消息
+      const initialMessages = [];
+      const startIndex = Math.max(0, lines.length - 100);
+      
+      for (let i = startIndex; i < lines.length; i++) {
+        try {
+          const record = JSON.parse(lines[i]);
+          if (record.type === 'message' && record.message) {
+            initialMessages.push({
+              role: record.message.role,
+              content: record.message.content,
+              timestamp: new Date(record.timestamp).getTime(),
+            });
+          }
+        } catch (e) {
+          // 跳过解析失败的行
+        }
+      }
+      
+      socket.emit('session-history:initial', {
+        sessionId: sessionKey,
+        actualSessionId: sessionInfo.sessionId,
+        messages: initialMessages,
+        total: lines.length,
+      });
+      
+      // 3. 使用 fs.watch 监控文件变化
+      const watcher = fs.watch(jsonlPath, { persistent: false }, (eventType) => {
+        if (eventType === 'change') {
+          // 文件变化，读取新增的行
+          setTimeout(() => {
+            try {
+              const newContent = fs.readFileSync(jsonlPath, 'utf-8');
+              const newLines = newContent.split('\n').filter(line => line.trim());
+              
+              // 只发送新增的行
+              if (newLines.length > lines.length) {
+                const newMessages = [];
+                for (let i = lines.length; i < newLines.length; i++) {
+                  try {
+                    const record = JSON.parse(newLines[i]);
+                    if (record.type === 'message' && record.message) {
+                      newMessages.push({
+                        role: record.message.role,
+                        content: record.message.content,
+                        timestamp: new Date(record.timestamp).getTime(),
+                      });
+                    }
+                  } catch (e) {
+                    // 跳过解析失败的行
+                  }
+                }
+                
+                if (newMessages.length > 0) {
+                  socket.emit('session-history:new', {
+                    messages: newMessages,
+                    timestamp: Date.now(),
+                  });
+                }
+              }
+            } catch (error) {
+              console.error('[WS] 读取会话文件失败:', error.message);
+            }
+          }, 100); // 延迟 100ms，确保文件写入完成
+        }
+      });
+      
+      // 存储 watcher
+      sessionWatchers.set(socket.id, { sessionId: sessionKey, watcher, jsonlPath });
+      
+    } catch (error) {
+      console.error('[WS] 订阅会话历史失败:', error.message);
+      socket.emit('session-history:error', {
+        error: error.message,
+      });
+    }
+  });
+  
+  // 取消订阅会话历史
+  socket.on('unsubscribe:session-history', () => {
+    const watcher = sessionWatchers.get(socket.id);
+    if (watcher) {
+      watcher.watcher.close();
+      sessionWatchers.delete(socket.id);
+      console.log('[WS] 客户端取消订阅会话历史:', watcher.sessionId);
+    }
+  });
+  
+  // 取消订阅 Gateway 日志
   socket.on('unsubscribe:logs', () => {
     const process = logProcesses.get(socket.id);
     if (process) {
@@ -1120,11 +1246,17 @@ io.on('connection', (socket) => {
   // 断开连接
   socket.on('disconnect', () => {
     console.log('[WS] 客户端断开:', socket.id);
-    // 清理对应的进程
+    // 清理 Gateway 日志进程
     const process = logProcesses.get(socket.id);
     if (process) {
       process.kill();
       logProcesses.delete(socket.id);
+    }
+    // 清理会话历史监听器
+    const watcher = sessionWatchers.get(socket.id);
+    if (watcher) {
+      watcher.watcher.close();
+      sessionWatchers.delete(socket.id);
     }
   });
 });

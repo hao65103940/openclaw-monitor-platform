@@ -3,6 +3,7 @@ import api from '@/services/api';
 import type { Agent } from '@/types';
 import { useState, useEffect, useRef } from 'react';
 import { useAgentStore } from '@/store/useAgentStore';
+import { io, Socket } from 'socket.io-client';
 
 interface LogDetailModalProps {
   agent: Agent & { timestamp?: number };
@@ -26,40 +27,150 @@ interface ToolCall {
   status?: 'success' | 'error';
 }
 
+interface WebSocketMessage {
+  role: string;
+  content: string | any[];
+  timestamp: number;
+}
+
 function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'logs' | 'tools' | 'messages'>('logs');
   const [isPaused, setIsPaused] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState<number>(0);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const socketRef = useRef<Socket | null>(null);
   
   // 获取 store 中的 setModalOpen
   const setModalOpen = useAgentStore((state) => state.setModalOpen);
 
   // 弹窗打开时暂停外部刷新，关闭时恢复
   useEffect(() => {
-    // 打开弹窗，暂停外部刷新
     setModalOpen(true);
-    
-    // 清理函数：关闭弹窗时恢复刷新
-    return () => {
-      setModalOpen(false);
-    };
+    return () => setModalOpen(false);
   }, [setModalOpen]);
 
+  // WebSocket 连接（实时接收新消息）
   useEffect(() => {
-    loadHistory();
+    const socket = io('http://localhost:3001', {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 10,
+    });
+
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      console.log('[WS] 会话历史已连接');
+      setWsConnected(true);
+      // 订阅会话历史
+      socket.emit('subscribe:session-history', { sessionId: agent.id });
+    });
+
+    // 接收初始历史数据
+    socket.on('session-history:initial', (data: { 
+      sessionId: string; 
+      messages: WebSocketMessage[]; 
+      total: number;
+    }) => {
+      console.log('[WS] 接收初始历史:', data.total, '条消息');
+      const parsedLogs = parseMessages(data.messages);
+      setLogs(parsedLogs);
+      setLastUpdateTime(Date.now());
+      setLoading(false);
+    });
+
+    // 接收新消息
+    socket.on('session-history:new', (data: { 
+      messages: WebSocketMessage[]; 
+      timestamp: number;
+    }) => {
+      console.log('[WS] 接收新消息:', data.messages.length, '条');
+      const newLogs = parseMessages(data.messages);
+      setLogs(prev => {
+        // 避免重复添加（检查最后一条消息的 timestamp）
+        if (prev.length > 0 && newLogs.length > 0) {
+          const lastTimestamp = prev[prev.length - 1].timestamp;
+          const filteredNewLogs = newLogs.filter(log => log.timestamp > lastTimestamp);
+          if (filteredNewLogs.length === 0) return prev;
+          return [...prev, ...filteredNewLogs];
+        }
+        return [...prev, ...newLogs];
+      });
+      setLastUpdateTime(data.timestamp);
+    });
+
+    // 错误处理
+    socket.on('session-history:error', (data: { error: string }) => {
+      console.error('[WS] 会话历史错误:', data.error);
+      setLogs(prev => [...prev, {
+        timestamp: Date.now(),
+        level: 'ERROR',
+        message: `❌ WebSocket 错误：${data.error}`,
+        type: 'system',
+      }]);
+      setLoading(false);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('[WS] 会话历史已断开');
+      setWsConnected(false);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('[WS] 连接失败:', error.message);
+      setWsConnected(false);
+    });
+
+    return () => {
+      console.log('[WS] 清理会话历史连接');
+      socket.emit('unsubscribe:session-history');
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [agent.id]);
+
+  // 解析消息为日志格式
+  function parseMessages(messages: WebSocketMessage[]): LogEntry[] {
+    const entries: LogEntry[] = [];
     
-    // 轮询加载最新数据（每 3 秒一次，暂停时停止）
-    const interval = setInterval(() => {
-      if (!isPaused) {
-        loadHistory();
+    messages.forEach((msg) => {
+      const content = typeof msg.content === 'string' 
+        ? msg.content 
+        : Array.isArray(msg.content)
+          ? msg.content.filter((item: any) => item.type === 'text').map((item: any) => item.text).join('')
+          : '';
+      
+      if (msg.role === 'user') {
+        entries.push({
+          timestamp: msg.timestamp,
+          level: 'INFO',
+          message: `👤 用户：${content.substring(0, 100) || '...'}`,
+          type: 'message',
+        });
+      } else if (msg.role === 'assistant') {
+        entries.push({
+          timestamp: msg.timestamp,
+          level: 'INFO',
+          message: `🤖 Agent: ${content.substring(0, 100) || '...'}`,
+          type: 'message',
+        });
+      } else if (msg.role === 'tool' || msg.role === 'toolResult') {
+        entries.push({
+          timestamp: msg.timestamp,
+          level: 'DEBUG',
+          message: `📥 工具结果：${content.substring(0, 100) || '...'}`,
+          type: 'tool',
+        });
       }
-    }, 10000); // 优化：3 秒 → 10 秒（会话历史不需要频繁刷新）
+    });
     
-    return () => clearInterval(interval);
-  }, [agent.id, isPaused]);
+    return entries;
+  }
 
   // 暂停/恢复自动刷新
   function togglePause() {
@@ -221,10 +332,17 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
             <p className="text-sm text-gray-400 mt-1 font-mono">{agent.id}</p>
           </div>
           <div className="flex items-center space-x-3">
-            <div className="flex items-center space-x-2 px-3 py-1.5 rounded bg-gray-700">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-              <span className="text-xs text-gray-300">自动刷新（3 秒）</span>
+            <div className={`flex items-center space-x-2 px-3 py-1.5 rounded ${wsConnected ? 'bg-green-900/30' : 'bg-yellow-900/30'}`}>
+              <span className={`w-2 h-2 rounded-full animate-pulse ${wsConnected ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
+              <span className="text-xs text-gray-300">
+                {wsConnected ? '🟢 WebSocket 实时' : '🟡 连接中...'}
+              </span>
             </div>
+            {lastUpdateTime > 0 && (
+              <div className="text-xs text-gray-400">
+                最后更新：{dayjs(lastUpdateTime).format('HH:mm:ss')}
+              </div>
+            )}
             <button
               onClick={togglePause}
               className={`px-3 py-1.5 rounded text-sm transition-colors ${
