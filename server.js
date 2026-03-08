@@ -318,6 +318,95 @@ let traceCache = null;
 let traceCacheTime = 0;
 const TRACE_CACHE_TTL = 20000; // 20 秒缓存
 
+/**
+ * 从 JSONL 文件提取第一条消息作为任务描述
+ */
+function extractTaskDescription(sessionKey, sessionId) {
+  try {
+    const jsonlPath = path.join(OPENCLAW.agentsPath, `main/sessions/${sessionId}.jsonl`);
+    if (!fs.existsSync(jsonlPath)) return null;
+    
+    const lines = fs.readFileSync(jsonlPath, 'utf-8').split('\n').filter(line => line.trim());
+    if (lines.length === 0) return null;
+    
+    // 读取前 5 条消息，找第一条用户消息
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      const record = JSON.parse(lines[i]);
+      if (record.type === 'message' && record.message?.role === 'user') {
+        const content = record.message.content;
+        // content 可能是字符串或数组
+        if (typeof content === 'string') {
+          return content.substring(0, 100);
+        } else if (Array.isArray(content)) {
+          const textItem = content.find(item => item.type === 'text');
+          if (textItem?.text) {
+            return textItem.text.substring(0, 100);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    // 静默失败
+  }
+  return null;
+}
+
+/**
+ * 解析会话 ID，生成简化显示信息
+ */
+function parseSessionInfo(sessionKey) {
+  const parts = sessionKey.split(':');
+  
+  // 默认值
+  let displayName = '会话';
+  let shortId = sessionKey.substring(0, 8);
+  let type = 'direct';
+  let typeIcon = '💬';
+  let typeName = '直接会话';
+  
+  // 提取短 ID（UUID 部分）
+  const uuidMatch = sessionKey.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i);
+  if (uuidMatch) {
+    shortId = uuidMatch[0].substring(0, 8);
+  }
+  
+  // 判断类型
+  if (sessionKey.includes('cron')) {
+    type = 'cron';
+    typeIcon = '⏰';
+    typeName = '定时任务';
+    displayName = '⏰ 定时任务';
+  } else if (sessionKey.includes('feishu')) {
+    type = 'feishu';
+    typeIcon = '📝';
+    typeName = '飞书会话';
+    displayName = '📝 飞书会话';
+  } else if (sessionKey.includes('wecom')) {
+    type = 'wecom';
+    typeIcon = '💼';
+    typeName = '企微会话';
+    displayName = '💼 企微会话';
+  } else if (sessionKey.includes('subagent') || sessionKey.includes('agent:')) {
+    type = 'subagent';
+    typeIcon = '🤖';
+    typeName = '子 Agent';
+    displayName = '🤖 子 Agent';
+  } else {
+    type = 'direct';
+    typeIcon = '💬';
+    typeName = '直接会话';
+    displayName = '💬 直接会话';
+  }
+  
+  return {
+    displayName,
+    shortId,
+    type,
+    typeIcon,
+    typeName,
+  };
+}
+
 app.get('/api/trace/flow', (req, res) => {
   try {
     const now = Date.now();
@@ -329,22 +418,39 @@ app.get('/api/trace/flow', (req, res) => {
     const sessionsData = getSessionsData();
     const sessions = sessionsData.sessions || [];
     
-    // 转换为 TraceNode 格式
+    // 转换为 TraceNode 格式（增强版）
     const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-    const flow = sessions.map(s => ({
-      id: s.key || `session:${s.updatedAt}`,
-      agentId: s.agentId || 'main',
-      channel: s.kind || 'direct',
-      channelId: null,
-      kind: s.kind || 'direct',
-      model: s.model || 'unknown',
-      status: s.updatedAt > fiveMinAgo ? 'running' : 'completed',
-      tokens: s.totalTokens || 0,
-      runtime: s.ageMs || 0,
-      timestamp: s.updatedAt,
-      key: s.key || `session:${s.updatedAt}`,
-      isActive: s.updatedAt > fiveMinAgo,
-    }));
+    const flow = sessions.map(s => {
+      const sessionKey = s.key || `session:${s.updatedAt}`;
+      const sessionId = s.sessionId || 'unknown';
+      const parsedInfo = parseSessionInfo(sessionKey);
+      const taskDescription = extractTaskDescription(sessionKey, sessionId);
+      
+      return {
+        id: sessionKey,
+        agentId: s.agentId || 'main',
+        channel: s.kind || 'direct',
+        channelId: null,
+        kind: s.kind || 'direct',
+        model: s.model || 'unknown',
+        status: s.updatedAt > fiveMinAgo ? 'running' : 'completed',
+        tokens: s.totalTokens || 0,
+        runtime: s.ageMs || 0,
+        timestamp: s.updatedAt,
+        key: sessionKey,
+        isActive: s.updatedAt > fiveMinAgo,
+        // 新增字段
+        displayName: parsedInfo.displayName,
+        shortId: parsedInfo.shortId,
+        sessionType: parsedInfo.type,
+        typeIcon: parsedInfo.typeIcon,
+        typeName: parsedInfo.typeName,
+        taskDescription,
+        inputTokens: s.inputTokens || 0,
+        outputTokens: s.outputTokens || 0,
+        contextTokens: s.contextTokens || 0,
+      };
+    });
     
     const result = { flow };
     // 更新缓存

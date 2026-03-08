@@ -14,6 +14,16 @@ interface TraceNode {
   timestamp: number;
   key: string;
   isActive: boolean;
+  // 新增字段
+  displayName: string;
+  shortId: string;
+  sessionType: string;
+  typeIcon: string;
+  typeName: string;
+  taskDescription?: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  contextTokens: number;
 }
 
 interface ChannelStat {
@@ -170,16 +180,6 @@ function Trace() {
       'review-agent': '代码审查员 🔍',
     };
     return names[agentId] || agentId;
-  }
-
-  function formatKind(kind: string): string {
-    const kinds: Record<string, string> = {
-      'direct': '直接会话',
-      'group': '群组会话',
-      'cron': '定时任务',
-      'subagent': '子 Agent',
-    };
-    return kinds[kind] || kind;
   }
 
   function formatChannel(channel: string): string {
@@ -426,41 +426,55 @@ function Trace() {
                   )}
                   
                   <div 
-                    className={`relative flex items-center p-4 rounded-lg border transition-all cursor-pointer ${
+                    className={`relative flex items-start p-4 rounded-lg border transition-all cursor-pointer ${
                       step.details.isActive 
                         ? 'bg-green-900/20 border-green-700 shadow-lg shadow-green-900/20' 
                         : 'bg-gray-900/50 border-gray-700 hover:border-gray-600'
                     }`}
                     onClick={() => setSelectedNode(step.details)}
                   >
-                    {/* 步骤编号 */}
-                    <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${
+                    {/* 类型图标 */}
+                    <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-2xl ${
                       step.details.isActive 
                         ? 'bg-green-700 text-white' 
                         : 'bg-gray-700 text-gray-300'
                     }`}>
-                      {step.step}
+                      {step.details.typeIcon || '💬'}
                     </div>
 
                     {/* 内容 */}
-                    <div className="ml-4 flex-1">
-                      <div className="flex items-center space-x-3">
-                        <h3 className="text-white font-semibold">{step.agent}</h3>
+                    <div className="ml-4 flex-1 min-w-0">
+                      <div className="flex items-center space-x-2 flex-wrap gap-2">
+                        <h3 className="text-white font-semibold text-base">
+                          {step.details.displayName || step.agent}
+                        </h3>
                         {getStatusBadge(step.status)}
-                        <span className="text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded">
-                          {step.action}
+                        <span className="text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded flex-shrink-0">
+                          {step.details.typeName || step.action}
+                        </span>
+                        <span className="text-xs text-gray-500 font-mono flex-shrink-0">
+                          #{step.details.shortId}
                         </span>
                       </div>
-                      <div className="mt-2 flex items-center space-x-4 text-sm text-gray-400">
+                      
+                      {/* 任务描述 */}
+                      {step.details.taskDescription && (
+                        <div className="mt-2 text-sm text-gray-300 bg-gray-800/50 rounded p-2 border border-gray-700">
+                          <span className="text-xs text-gray-500 block mb-1">📝 任务：</span>
+                          <p className="line-clamp-2">{step.details.taskDescription}</p>
+                        </div>
+                      )}
+                      
+                      <div className="mt-2 flex items-center flex-wrap gap-3 text-sm text-gray-400">
                         <span>📊 {formatNumber(step.details.tokens)} tokens</span>
                         <span>⏱️ {formatDuration(step.details.runtime)}</span>
                         <span>🕐 {formatTime(step.details.timestamp)}</span>
-                        <span className="text-xs text-gray-500 font-mono">{step.details.agentId}</span>
+                        <span className="text-xs text-blue-400 font-mono">{step.details.model}</span>
                       </div>
                     </div>
 
-                    {/* 模型标识 */}
-                    <div className="ml-4 text-right">
+                    {/* 模型标识（移动端隐藏） */}
+                    <div className="ml-4 text-right hidden lg:block">
                       <div className="text-xs text-gray-400">Model</div>
                       <div className="text-sm text-blue-400 font-mono">{step.details.model}</div>
                     </div>
@@ -742,54 +756,80 @@ function Trace() {
             </div>
             
             <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-gray-400 text-sm">Agent ID</div>
-                  <div className="text-white font-mono">{selectedNode.agentId}</div>
+              {/* 基本信息 */}
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+                <div className="flex items-center space-x-3 mb-3">
+                  <span className="text-3xl">{selectedNode.typeIcon}</span>
+                  <div>
+                    <h4 className="text-lg font-semibold text-white">{selectedNode.displayName}</h4>
+                    <p className="text-sm text-gray-400">#{selectedNode.shortId} · {selectedNode.typeName}</p>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-gray-400 text-sm">会话类型</div>
-                  <div className="text-white">{formatKind(selectedNode.kind)}</div>
-                </div>
-                <div>
-                  <div className="text-gray-400 text-sm">状态</div>
-                  <div>{getStatusBadge(selectedNode.status)}</div>
-                </div>
-                <div>
-                  <div className="text-gray-400 text-sm">模型</div>
-                  <div className="text-blue-400 font-mono">{selectedNode.model}</div>
-                </div>
-                <div>
-                  <div className="text-gray-400 text-sm">Token 消耗</div>
-                  <div className="text-white">{formatNumber(selectedNode.tokens)}</div>
-                </div>
-                <div>
-                  <div className="text-gray-400 text-sm">执行耗时</div>
-                  <div className="text-white">{formatDuration(selectedNode.runtime)}</div>
-                </div>
-                <div>
-                  <div className="text-gray-400 text-sm">开始时间</div>
-                  <div className="text-white">{formatTime(selectedNode.timestamp)}</div>
-                </div>
-                <div>
-                  <div className="text-gray-400 text-sm">活跃状态</div>
-                  <div className={selectedNode.isActive ? 'text-green-400' : 'text-gray-400'}>
-                    {selectedNode.isActive ? '🟢 进行中' : '⏸️ 已完成'}
+                
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div>
+                    <div className="text-gray-400 text-xs mb-1">状态</div>
+                    <div>{getStatusBadge(selectedNode.status)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs mb-1">模型</div>
+                    <div className="text-blue-400 font-mono text-sm">{selectedNode.model}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs mb-1">活跃状态</div>
+                    <div className={selectedNode.isActive ? 'text-green-400' : 'text-gray-400'}>
+                      {selectedNode.isActive ? '🟢 进行中' : '⏸️ 已完成'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs mb-1">总 Token</div>
+                    <div className="text-white font-mono">{formatNumber(selectedNode.tokens)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs mb-1">执行耗时</div>
+                    <div className="text-white font-mono">{formatDuration(selectedNode.runtime)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs mb-1">开始时间</div>
+                    <div className="text-white text-sm">{formatTime(selectedNode.timestamp)}</div>
                   </div>
                 </div>
               </div>
 
-              <div>
-                <div className="text-gray-400 text-sm mb-2">会话 Key</div>
-                <div className="bg-gray-900 rounded p-3 font-mono text-xs text-gray-300 break-all">
-                  {selectedNode.key}
+              {/* Token 详情 */}
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+                <h4 className="text-sm font-semibold text-white mb-3">📊 Token 详情</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-xs text-gray-400 mb-1">输入</div>
+                    <div className="text-purple-400 font-mono text-lg">{formatNumber(selectedNode.inputTokens)}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-gray-400 mb-1">输出</div>
+                    <div className="text-green-400 font-mono text-lg">{formatNumber(selectedNode.outputTokens)}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-gray-400 mb-1">上下文</div>
+                    <div className="text-blue-400 font-mono text-lg">{formatNumber(selectedNode.contextTokens)}</div>
+                  </div>
                 </div>
               </div>
 
+              {/* 任务描述 */}
+              {selectedNode.taskDescription && (
+                <div>
+                  <div className="text-gray-400 text-sm mb-2">📝 任务描述</div>
+                  <div className="bg-gray-900 rounded p-3 text-sm text-gray-300 border border-gray-700 whitespace-pre-wrap">
+                    {selectedNode.taskDescription}
+                  </div>
+                </div>
+              )}
+
+              {/* 会话 ID */}
               <div>
-                <div className="text-gray-400 text-sm mb-2">会话 ID</div>
+                <div className="text-gray-400 text-sm mb-2">🔑 会话 Key</div>
                 <div className="bg-gray-900 rounded p-3 font-mono text-xs text-gray-300 break-all">
-                  {selectedNode.id}
+                  {selectedNode.key}
                 </div>
               </div>
             </div>
