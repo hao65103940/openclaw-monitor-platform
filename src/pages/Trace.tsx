@@ -495,8 +495,8 @@ function Trace() {
                 </span>
               )}
             </div>
-        
-        <div className="p-6">
+            
+            <div className="p-6">
           {loadingStates.flow ? (
             <div className="text-center py-8 text-gray-400">
               🔄 正在加载执行流程...
