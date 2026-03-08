@@ -1165,7 +1165,7 @@ io.on('connection', (socket) => {
             
             // 工具调用（从 content 数组中解析 type='toolCall' 的项）
             if (Array.isArray(record.message.content)) {
-              record.message.content.forEach((item: any) => {
+              record.message.content.forEach((item) => {
                 if (item.type === 'toolCall') {
                   initialToolCalls.push({
                     name: item.name || item.tool,
@@ -1228,7 +1228,7 @@ io.on('connection', (socket) => {
                       
                       // 工具调用（从 content 数组中解析）
                       if (Array.isArray(record.message.content)) {
-                        record.message.content.forEach((item: any) => {
+                        record.message.content.forEach((item) => {
                           if (item.type === 'toolCall') {
                             newToolCalls.push({
                               name: item.name || item.tool,
