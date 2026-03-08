@@ -338,6 +338,8 @@ function Dashboard() {
   const { activeAgents, recentAgents, stats, loading, error, refreshAll, lastUpdated, apiStopped, resetApiRetry } = useAgentStore();
   const [currentTime, setCurrentTime] = useState(dayjs());
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'running' | 'done' | 'failed'>('all');
 
   // 动态更新时间（每秒）
   useEffect(() => {
@@ -408,6 +410,23 @@ function Dashboard() {
     failedAgents: 0,
     totalTokens: 0,
   };
+
+  // 筛选会话列表
+  const filteredActiveAgents = (activeAgents || []).filter(agent => {
+    const matchKeyword = !searchKeyword || 
+      (agent.task && agent.task.toLowerCase().includes(searchKeyword.toLowerCase())) ||
+      (agent.label && agent.label.toLowerCase().includes(searchKeyword.toLowerCase()));
+    const matchStatus = filterStatus === 'all' || agent.status === filterStatus;
+    return matchKeyword && matchStatus;
+  });
+
+  const filteredRecentAgents = (recentAgents || []).filter(agent => {
+    const matchKeyword = !searchKeyword || 
+      (agent.task && agent.task.toLowerCase().includes(searchKeyword.toLowerCase())) ||
+      (agent.label && agent.label.toLowerCase().includes(searchKeyword.toLowerCase()));
+    const matchStatus = filterStatus === 'all' || agent.status === filterStatus;
+    return matchKeyword && matchStatus;
+  });
 
   return (
     <div className="space-y-6">
@@ -482,6 +501,47 @@ function Dashboard() {
         </div>
       )}
 
+      {/* 筛选栏 */}
+      <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex-1 min-w-[200px]">
+            <input
+              type="text"
+              placeholder="🔍 搜索任务描述..."
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as any)}
+              className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="all">全部状态</option>
+              <option value="running">🟢 运行中</option>
+              <option value="done">✅ 已完成</option>
+              <option value="failed">❌ 失败</option>
+            </select>
+          </div>
+          {(searchKeyword || filterStatus !== 'all') && (
+            <button
+              onClick={() => {
+                setSearchKeyword('');
+                setFilterStatus('all');
+              }}
+              className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
+            >
+              🔄 重置
+            </button>
+          )}
+          <div className="text-sm text-gray-400 ml-auto">
+            显示 {filteredActiveAgents.length + filteredRecentAgents.length} 个会话
+          </div>
+        </div>
+      </div>
+
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
@@ -516,17 +576,18 @@ function Dashboard() {
 
       {/* 活跃会话 */}
       <AgentTable 
-        agents={activeAgents || []} 
+        agents={filteredActiveAgents} 
         title="🟢 活跃会话" 
-        emptyMessage="当前没有正在运行的会话"
+        emptyMessage={searchKeyword || filterStatus !== 'all' ? "没有匹配的会话" : "当前没有正在运行的会话"}
         onViewLog={setSelectedAgent}
       />
 
       {/* 最近完成的会话 - 分页展示（默认 10 条） */}
       <PaginatedAgentTable 
-        agents={recentAgents || []} 
+        agents={filteredRecentAgents} 
         title="✅ 最近完成的会话" 
         pageSize={10}
+        emptyMessage={searchKeyword || filterStatus !== 'all' ? "没有匹配的会话" : "暂无数据"}
         onViewLog={setSelectedAgent}
       />
 
