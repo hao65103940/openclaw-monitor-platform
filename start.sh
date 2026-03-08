@@ -1,59 +1,56 @@
 #!/bin/bash
 
-echo "🚀 启动 Agent 监控平台..."
+# Monitor Platform 启动脚本
+# 自动启动后端 API 服务和前端开发服务器
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+echo "🚀 启动 Monitor Platform..."
 echo ""
 
-# 进入项目目录
-cd "$(dirname "$0")"
+# 检查配置文件
+if [ ! -f ".env" ]; then
+    echo "⚠️  .env 文件不存在，从 .env.example 复制..."
+    cp .env.example .env
+    echo "✅ 已创建 .env 文件，请根据实际情况修改配置"
+    echo ""
+fi
 
-# 检查 node_modules
-if [ ! -d "node_modules" ]; then
-  echo "📦 首次启动，安装依赖..."
-  npm install
-  if [ $? -ne 0 ]; then
-    echo "❌ 依赖安装失败"
+# 检查 config.json
+if [ ! -f "config.json" ]; then
+    echo "⚠️  config.json 文件不存在..."
+    echo "请创建配置文件并设置正确的路径"
     exit 1
-  fi
 fi
 
-# 停止旧的服务
-echo "🛑 检查并停止旧服务..."
-pkill -f "node server.js" 2>/dev/null
-lsof -ti:3001 | xargs kill -9 2>/dev/null
-sleep 1
-
-# 创建 logs 目录
-mkdir -p logs
-
-# 启动后端 API 服务（后台）
-echo "📡 启动 API 服务（端口 3001）..."
-nohup node server.js > logs/server.log 2>&1 &
-SERVER_PID=$!
-echo "✅ 后端服务 PID: $SERVER_PID"
-
-# 等待后端启动
-sleep 2
-
-# 测试后端是否可用
-echo "🧪 测试 API 连接..."
-if curl -s http://localhost:3001/api/health | grep -q "ok"; then
-  echo "✅ 后端服务正常"
+# 启动后端服务
+echo "📡 启动后端 API 服务..."
+if pgrep -f "node server.js" > /dev/null; then
+    echo "⚠️  后端服务已在运行"
 else
-  echo "⚠️  后端服务启动中，请查看日志：logs/server.log"
+    nohup node server.js > logs/server.log 2>&1 &
+    sleep 2
+    if pgrep -f "node server.js" > /dev/null; then
+        echo "✅ 后端服务已启动 (PID: $(pgrep -f 'node server.js'))"
+    else
+        echo "❌ 后端服务启动失败，请查看 logs/server.log"
+        exit 1
+    fi
 fi
 
 echo ""
-echo "=========================================="
-echo "✅ 服务已启动！"
-echo "=========================================="
-echo "🌐 前端地址：http://localhost:3000"
-echo "🔌 API 地址：http://localhost:3001"
-echo "📝 后端日志：logs/server.log"
-echo ""
-echo "🛑 停止服务：执行 ./stop.sh 或 Ctrl+C"
-echo "=========================================="
+echo "📊 后端 API 地址：http://localhost:3001/api/health"
 echo ""
 
-# 启动前端开发服务器（前台）
-echo "🎨 启动前端开发服务器..."
-npm run dev
+# 提示前端启动
+echo "💡 前端开发服务器："
+echo "   运行以下命令启动前端："
+echo "   npm run dev"
+echo ""
+echo "📖 查看日志："
+echo "   tail -f logs/server.log"
+echo ""
+echo "🛑 停止服务："
+echo "   ./stop.sh"
+echo ""

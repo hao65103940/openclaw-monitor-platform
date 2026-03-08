@@ -1,3 +1,10 @@
+[dotenv@17.3.1] injecting env (12) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+📋 已加载配置文件：config.json
+⚙️  配置信息:
+   端口：3001
+   OpenClaw 路径：/root/.openclaw
+   Agents 路径：/root/.openclaw/agents
+   日志路径：/root/.openclaw/monitor-platform/logs
 🚀 Agent 监控平台 API 服务已启动
 📡 监听端口：http://0.0.0.0:3001
 📊 可用端点:
@@ -8,8 +15,4 @@
 💡 当前使用 **真实数据** (OpenClaw CLI)
 🌐 可从外部访问（需要防火墙开放端口）
 [API] 请求会话历史：agent:main:main
-[API] 返回会话历史：80 条消息，43 个工具调用
-[API] 请求会话历史：agent:main:main
-[API] 返回会话历史：82 条消息，44 个工具调用
-[API] 请求会话历史：agent:main:main
-[API] 返回会话历史：84 条消息，45 个工具调用
+[API] 返回会话历史：257 条消息，140 个工具调用

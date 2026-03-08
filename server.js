@@ -2,6 +2,10 @@
  * Agent 监控平台 - API 桥接服务
  * 
  * 调用 OpenClaw CLI 获取真实数据
+ * 
+ * 配置说明：
+ * - config.json: 基础配置（路径、端口等）
+ * - .env: 环境变量（可覆盖 config.json）
  */
 
 import express from 'express';
@@ -10,31 +14,73 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { config } from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// 加载环境变量
+config({ path: path.join(__dirname, '.env') });
+
+// 加载配置文件
+let appConfig = {};
+const configPath = path.join(__dirname, 'config.json');
+if (fs.existsSync(configPath)) {
+  appConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  console.log('📋 已加载配置文件：config.json');
+}
+
+// 从环境变量或配置文件读取配置
+const PORT = parseInt(process.env.PORT || appConfig.server?.port || '3001');
+const HOST = process.env.HOST || appConfig.server?.host || '0.0.0.0';
+const CACHE_TTL = parseInt(process.env.CACHE_TTL || appConfig.server?.cacheTTL || '5000');
+
+// OpenClaw 路径配置
+const OPENCLAW = {
+  cliPath: process.env.OPENCLAW_CLI_PATH || appConfig.openclaw?.cliPath || '/root/.nvm/versions/node/v24.13.0/bin/openclaw',
+  nodePath: process.env.NODE_PATH || appConfig.openclaw?.nodePath || '/root/.nvm/versions/node/v24.13.0/bin/node',
+  basePath: process.env.OPENCLAW_BASE_PATH || appConfig.openclaw?.basePath || '/root/.openclaw',
+  agentsPath: process.env.OPENCLAW_AGENTS_PATH || appConfig.openclaw?.agentsPath || '/root/.openclaw/agents',
+  workspacePath: process.env.OPENCLAW_WORKSPACE_PATH || appConfig.openclaw?.workspacePath || '/root/.openclaw/workspace',
+};
+
+// 日志路径
+const LOG_PATH = process.env.LOG_PATH || appConfig.server?.logPath || '/root/.openclaw/monitor-platform/logs';
+
+// 安全配置
+const ALLOWED_BASE_PATHS = (process.env.ALLOWED_BASE_PATHS || appConfig.security?.allowedBasePaths || '/root/.openclaw').split(',');
+
 const app = express();
-const PORT = 3001;
 
 app.use(cors());
 app.use(express.json());
+
+console.log('⚙️  配置信息:');
+console.log(`   端口：${PORT}`);
+console.log(`   OpenClaw 路径：${OPENCLAW.basePath}`);
+console.log(`   Agents 路径：${OPENCLAW.agentsPath}`);
+console.log(`   日志路径：${LOG_PATH}`);
 
 /**
  * 执行 OpenClaw CLI 命令（带缓存）
  */
 let sessionsCache = null;
 let cacheTimestamp = 0;
-const CACHE_TTL = 5000; // 5 秒缓存
 
 function runOpenClawCommand(command) {
   try {
-    // 使用完整路径
-    const fullCommand = `/root/.nvm/versions/node/v24.13.0/bin/${command}`;
-    const output = execSync(fullCommand, {
+    // 使用配置的 CLI 路径
+    const cliPath = command.startsWith('openclaw') 
+      ? OPENCLAW.cliPath 
+      : `${OPENCLAW.nodePath}/${command}`;
+    
+    const output = execSync(cliPath, {
       encoding: 'utf-8',
       timeout: 15000, // 15 秒超时
-      env: { ...process.env, PATH: `/root/.nvm/versions/node/v24.13.0/bin:${process.env.PATH}` },
+      env: { 
+        ...process.env, 
+        PATH: `${path.dirname(OPENCLAW.nodePath)}:${process.env.PATH}`,
+      },
     });
     return JSON.parse(output);
   } catch (error) {
@@ -360,7 +406,7 @@ app.get('/api/sessions/:sessionId/history', async (req, res) => {
     console.log(`[API] 请求会话历史：${sessionId}`);
     
     // 1. 从 sessions.json 查找对应的 jsonl 文件路径
-    const sessionsIndexPath = '/root/.openclaw/agents/main/sessions/sessions.json';
+    const sessionsIndexPath = path.join(OPENCLAW.agentsPath, 'main/sessions/sessions.json');
     
     if (!fs.existsSync(sessionsIndexPath)) {
       return res.status(404).json({ 
@@ -560,8 +606,8 @@ app.get('/api/agents/config/list', (req, res) => {
       skills: [],
     };
     
-    // ========== 1. /root/.openclaw/agents 目录 ==========
-    const agentsPath = '/root/.openclaw/agents';
+    // ========== 1. Agents 目录 ==========
+    const agentsPath = OPENCLAW.agentsPath;
     if (fs.existsSync(agentsPath)) {
       const agentDirs = fs.readdirSync(agentsPath).filter(f => {
         const stat = fs.statSync(path.join(agentsPath, f));
@@ -582,8 +628,8 @@ app.get('/api/agents/config/list', (req, res) => {
       });
     }
     
-    // ========== 2. /root/.openclaw/workspace 目录 ==========
-    const workspacePath = '/root/.openclaw/workspace';
+    // ========== 2. Workspace 目录 ==========
+    const workspacePath = OPENCLAW.workspacePath;
     if (fs.existsSync(workspacePath)) {
       const workspaceFiles = scanDirectory(workspacePath, '', 3);
       
@@ -660,11 +706,13 @@ app.get('/api/file/read', (req, res) => {
       });
     }
     
-    // 安全限制：只能读取 /root/.openclaw 下的文件
-    if (!filePath.startsWith('/root/.openclaw/')) {
+    // 安全限制：只能访问允许的基础路径
+    const isAllowed = ALLOWED_BASE_PATHS.some(base => filePath.startsWith(base));
+    if (!isAllowed) {
       return res.status(403).json({
         error: '禁止访问此路径',
         path: filePath,
+        allowedBasePaths: ALLOWED_BASE_PATHS,
       });
     }
     
@@ -722,11 +770,13 @@ app.put('/api/file/save', (req, res) => {
       });
     }
     
-    // 安全限制：只能写入 /root/.openclaw 下的文件
-    if (!filePath.startsWith('/root/.openclaw/')) {
+    // 安全限制：只能写入允许的基础路径
+    const isAllowed = ALLOWED_BASE_PATHS.some(base => filePath.startsWith(base));
+    if (!isAllowed) {
       return res.status(403).json({
         error: '禁止写入此路径',
         path: filePath,
+        allowedBasePaths: ALLOWED_BASE_PATHS,
       });
     }
     
@@ -756,7 +806,7 @@ app.put('/api/file/save', (req, res) => {
  */
 app.get('/api/logs/list', (req, res) => {
   try {
-    const logsPath = '/root/.openclaw/monitor-platform/logs';
+    const logsPath = LOG_PATH;
     const logs = [];
     
     // 扫描 logs 目录
@@ -776,7 +826,7 @@ app.get('/api/logs/list', (req, res) => {
     }
     
     // 添加 server.log（主日志）
-    const serverLogPath = '/root/.openclaw/monitor-platform/logs/server.log';
+    const serverLogPath = path.join(LOG_PATH, 'server.log');
     if (fs.existsSync(serverLogPath)) {
       const stat = fs.statSync(serverLogPath);
       logs.push({
@@ -814,7 +864,7 @@ app.get('/api/logs/read', (req, res) => {
     }
     
     // 安全限制：只能读取 logs 目录下的文件
-    const logsPath = '/root/.openclaw/monitor-platform/logs';
+    const logsPath = LOG_PATH;
     const filePath = path.join(logsPath, file);
     
     if (!filePath.startsWith(logsPath)) {
