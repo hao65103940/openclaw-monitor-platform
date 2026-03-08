@@ -201,10 +201,12 @@ app.get('/api/sessions/list', (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 20;
     const sessionsData = getSessionsData();
+    // CLI 返回格式：{sessions: [...], count: N, path: '...'}
     const sessions = (sessionsData.sessions || []).slice(0, limit);
     
     res.json({
       sessions: sessions.map(s => ({
+        sessionId: s.sessionId || s.key,
         sessionKey: s.key,
         label: s.key || '未知会话',
         createdAt: s.updatedAt - (s.ageMs || 0),
@@ -212,7 +214,11 @@ app.get('/api/sessions/list', (req, res) => {
         messageCount: 0, // OpenClaw 不提供
         agentId: s.agentId || 'main',
         model: s.model,
-        tokens: s.totalTokens,
+        tokens: s.totalTokens || 0,
+        inputTokens: s.inputTokens || 0,
+        outputTokens: s.outputTokens || 0,
+        contextTokens: s.contextTokens || 0,
+        kind: s.kind || 'direct',
       })),
       total: sessions.length,
     });
