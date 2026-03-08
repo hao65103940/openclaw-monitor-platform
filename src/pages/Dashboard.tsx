@@ -91,6 +91,9 @@ function AgentTable({ agents, title, emptyMessage, onViewLog }: {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                 模型
               </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                开始时间
+              </th>
               {onViewLog && (
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">
                   操作
@@ -126,6 +129,16 @@ function AgentTable({ agents, title, emptyMessage, onViewLog }: {
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-400">
                   {agent.model || '-'}
+                </td>
+                <td className="px-6 py-4 text-sm text-gray-400">
+                  {agent.startedAt ? (
+                    <div>
+                      <div className="text-xs">{dayjs(agent.startedAt).format('MM-DD HH:mm')}</div>
+                      <div className="text-xs text-gray-500">{dayjs(agent.startedAt).fromNow()}</div>
+                    </div>
+                  ) : (
+                    '-'
+                  )}
                 </td>
                 {onViewLog && (
                   <td className="px-6 py-4 text-center">
@@ -197,6 +210,9 @@ function PaginatedAgentTable({ agents, title, pageSize = 10, onViewLog }: {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                 模型
               </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                开始时间
+              </th>
               {onViewLog && (
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">
                   操作
@@ -232,6 +248,16 @@ function PaginatedAgentTable({ agents, title, pageSize = 10, onViewLog }: {
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-400">
                   {agent.model || '-'}
+                </td>
+                <td className="px-6 py-4 text-sm text-gray-400">
+                  {agent.startedAt ? (
+                    <div>
+                      <div className="text-xs">{dayjs(agent.startedAt).format('MM-DD HH:mm')}</div>
+                      <div className="text-xs text-gray-500">{dayjs(agent.startedAt).fromNow()}</div>
+                    </div>
+                  ) : (
+                    '-'
+                  )}
                 </td>
                 {onViewLog && (
                   <td className="px-6 py-4 text-center">
