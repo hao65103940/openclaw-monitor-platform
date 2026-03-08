@@ -104,96 +104,6 @@ function runOpenClawCommand(command) {
 }
 
 /**
- * 从所有 Agent 目录读取会话数据（从 JSONL 文件最后一行）
- */
-function getAllAgentsSessions() {
-  const agentsPath = OPENCLAW.agentsPath;
-  const allSessions = [];
-  
-  try {
-    // 读取所有 Agent 目录
-    const agentDirs = fs.readdirSync(agentsPath, { withFileTypes: true })
-      .filter(dirent => dirent.isDirectory() && !dirent.name.startsWith('.'))
-      .map(dirent => dirent.name);
-    
-    // 遍历每个 Agent
-    agentDirs.forEach(agentId => {
-      const agentSessionsPath = path.join(agentsPath, agentId, 'sessions');
-      
-      if (fs.existsSync(agentSessionsPath)) {
-        try {
-          // 读取所有 JSONL 文件
-          const files = fs.readdirSync(agentSessionsPath)
-            .filter(f => f.endsWith('.jsonl'));
-          
-          files.forEach(file => {
-            const filePath = path.join(agentSessionsPath, file);
-            const stats = fs.statSync(filePath);
-            const sessionId = file.replace('.jsonl', '');
-            
-            // 从 JSONL 文件读取首行（创建时间）和末行（统计数据）
-            try {
-              const firstLine = execSync(`head -1 "${filePath}"`, { encoding: 'utf-8' });
-              const lastLine = execSync(`tail -1 "${filePath}"`, { encoding: 'utf-8' });
-              const firstEntry = JSON.parse(firstLine);
-              const lastEntry = JSON.parse(lastLine);
-              
-              // 提取会话类型（从 sessionKey 或 cwd）
-              let sessionType = 'direct';
-              if (lastEntry.sessionKey) {
-                // agent:main:feishu:group:xxx → feishu:group
-                const parts = lastEntry.sessionKey.split(':');
-                if (parts.length > 2) {
-                  sessionType = parts.slice(2, 4).join(':');
-                }
-              } else if (lastEntry.cwd && lastEntry.cwd.includes('feishu-agent')) {
-                sessionType = 'feishu';
-              } else if (lastEntry.cwd && lastEntry.cwd.includes('wecom-agent')) {
-                sessionType = 'wecom';
-              }
-              
-              // 提取 Token 数据（从 message.usage 或根节点）
-              const usage = lastEntry.message?.usage || lastEntry.tokenUsage || {};
-              const totalTokens = usage.totalTokens || usage.total || 0;
-              const inputTokens = usage.input || usage.inputTokens || 0;
-              const outputTokens = usage.output || usage.outputTokens || 0;
-              
-              // 计算会话时长（从第一行 timestamp 到最后修改时间）
-              const updatedAt = stats.mtimeMs;
-              const createdAt = firstEntry.timestamp ? new Date(firstEntry.timestamp).getTime() : updatedAt;
-              const ageMs = updatedAt - createdAt;
-              
-              allSessions.push({
-                sessionId: sessionId,
-                key: `agent:${agentId}:${sessionType}:${sessionId}`,
-                agentId: agentId,
-                model: lastEntry.message?.model || lastEntry.model || 'qwen3.5-plus',
-                totalTokens: totalTokens,
-                inputTokens: inputTokens,
-                outputTokens: outputTokens,
-                updatedAt: updatedAt,
-                createdAt: createdAt,
-                ageMs: ageMs,
-              });
-            } catch (error) {
-              log('debug', `[多 Agent] 读取 ${agentId}/${file} 元数据失败:`, error.message);
-            }
-          });
-        } catch (error) {
-          log('debug', `[多 Agent] 读取 ${agentId} 目录失败:`, error.message);
-        }
-      }
-    });
-    
-    log('info', `[多 Agent] 从 ${agentDirs.length} 个 Agent 读取 ${allSessions.length} 个会话`);
-  } catch (error) {
-    log('error', '[多 Agent] 读取所有 Agent 会话失败:', error.message);
-  }
-  
-  return allSessions;
-}
-
-/**
  * 获取会话数据（带缓存 + 数据验证）
  */
 function getSessionsData() {
@@ -203,21 +113,22 @@ function getSessionsData() {
     return sessionsCache;
   }
   
-  // 从所有 Agent 目录读取会话数据
-  const allSessions = getAllAgentsSessions();
+  // 缓存失效，重新获取
+  const sessionsData = runOpenClawCommand('openclaw sessions --json');
   
   // 数据验证：过滤无效会话
-  const validSessions = allSessions.filter(validateSessionData);
-  const invalidCount = allSessions.length - validSessions.length;
-  
-  if (invalidCount > 0) {
-    log('warn', `[数据验证] 过滤 ${invalidCount} 个无效会话`);
+  if (sessionsData.sessions && Array.isArray(sessionsData.sessions)) {
+    const validSessions = sessionsData.sessions.filter(validateSessionData);
+    const invalidCount = sessionsData.sessions.length - validSessions.length;
+    
+    if (invalidCount > 0) {
+      log('warn', `[数据验证] 过滤 ${invalidCount} 个无效会话`);
+    }
+    
+    sessionsCache = { ...sessionsData, sessions: validSessions };
+  } else {
+    sessionsCache = sessionsData;
   }
-  
-  sessionsCache = {
-    sessions: validSessions,
-    count: validSessions.length,
-  };
   
   cacheTimestamp = now;
   return sessionsCache;
@@ -230,27 +141,11 @@ function formatAgent(session, label) {
   const createdAt = session.updatedAt - (session.ageMs || 0);
   const updatedAt = session.updatedAt;
   
-  // 从 sessionKey 解析 agentId
-  // 格式：agent:{agentId}:{sessionType}:{sessionId}
-  // 例如：agent:main:main, agent:feishu-agent:group:xxx
-  const sessionKey = session.key || session.sessionKey || '';
-  let agentId = 'main'; // 默认主 Agent
-  
-  if (sessionKey.startsWith('agent:')) {
-    const parts = sessionKey.split(':');
-    if (parts.length >= 2) {
-      agentId = parts[1]; // 提取 agentId
-    }
-  }
-  
-  // 去重：使用 sessionId 作为唯一 ID（避免同一会话不同 sessionKey 导致重复）
-  const uniqueId = session.sessionId || session.key || `agent:unknown`;
-  
   return {
-    id: uniqueId,
-    sessionId: session.sessionId || session.key,
-    sessionKey: session.key || session.sessionKey,
-    agentId: `agent:${agentId}`, // 添加前缀匹配前端配置
+    id: session.sessionId || session.sessionKey || session.key || `agent:unknown`,  // 优先使用 UUID 格式的 sessionId
+    sessionId: session.sessionId || session.key,  // 添加 sessionId 字段
+    sessionKey: session.key || session.sessionKey,  // 添加 sessionKey 字段
+    agentId: 'agent:main',
     status: 'done', // 存储的会话都是已完成的
     task: label || '未知任务',
     label: label || '会话',
@@ -371,8 +266,8 @@ app.get('/api/sessions/list', (req, res) => {
         id: s.sessionId || s.key,
         sessionId: s.sessionId || s.key,
         sessionKey: s.key,
-        label: s.key || `${s.agentId}:${s.sessionId}`,
-        createdAt: s.createdAt || (s.updatedAt - (s.ageMs || 0)),
+        label: s.key || '未知会话',
+        createdAt: s.updatedAt - (s.ageMs || 0),
         updatedAt: s.updatedAt,
         messageCount: 0,
         agentId: s.agentId || 'main',
@@ -384,7 +279,6 @@ app.get('/api/sessions/list', (req, res) => {
         outputTokens: s.outputTokens || 0,
         contextTokens: s.contextTokens || 0,
         kind: s.kind || 'direct',
-        ageMs: s.ageMs || 0,
         runtimeMs: s.ageMs || 0,
         runtime: formatDuration(s.ageMs || 0),
       })),
@@ -2118,37 +2012,19 @@ io.on('connection', (socket) => {
     log('info', '[WS] 客户端订阅会话历史:', sessionId, socket.id);
     
     try {
-      // 1. 从所有 Agent 目录查找会话
-      let sessionInfo = null;
-      let agentId = 'main';
+      // 1. 先发送完整历史（复用现有 API 逻辑）
+      const sessionsIndexPath = path.join(OPENCLAW.agentsPath, 'main/sessions/sessions.json');
+      const sessionsIndex = JSON.parse(fs.readFileSync(sessionsIndexPath, 'utf-8'));
       
-      const agentDirs = fs.readdirSync(OPENCLAW.agentsPath, { withFileTypes: true })
-        .filter(dirent => dirent.isDirectory() && !dirent.name.startsWith('.'))
-        .map(dirent => dirent.name);
+      // 查找 session（支持 sessionKey 和 UUID）
+      let sessionInfo = sessionsIndex[sessionId];
+      let sessionKey = sessionId;
       
-      for (const dir of agentDirs) {
-        const sessionsIndexPath = path.join(OPENCLAW.agentsPath, dir, 'sessions', 'sessions.json');
-        if (fs.existsSync(sessionsIndexPath)) {
-          try {
-            const sessionsIndex = JSON.parse(fs.readFileSync(sessionsIndexPath, 'utf-8'));
-            if (sessionsIndex && sessionsIndex[sessionId]) {
-              sessionInfo = sessionsIndex[sessionId];
-              agentId = dir;
-              break;
-            }
-          } catch (e) {
-            // sessions.json 可能为空，继续查找
-          }
-        }
-      }
-      
-      // 如果 sessions.json 找不到，直接查找 JSONL 文件
       if (!sessionInfo) {
-        for (const dir of agentDirs) {
-          const jsonlPath = path.join(OPENCLAW.agentsPath, dir, 'sessions', `${sessionId}.jsonl`);
-          if (fs.existsSync(jsonlPath)) {
-            sessionInfo = { sessionId };
-            agentId = dir;
+        for (const [key, info] of Object.entries(sessionsIndex)) {
+          if (info.sessionId === sessionId) {
+            sessionInfo = info;
+            sessionKey = key;
             break;
           }
         }
@@ -2163,7 +2039,7 @@ io.on('connection', (socket) => {
       }
       
       // 2. 读取 JSONL 文件，发送初始历史
-      const jsonlPath = path.join(OPENCLAW.agentsPath, agentId, 'sessions', `${sessionInfo.sessionId}.jsonl`);
+      const jsonlPath = `/root/.openclaw/agents/main/sessions/${sessionInfo.sessionId}.jsonl`;
       const content = fs.readFileSync(jsonlPath, 'utf-8');
       const lines = content.split('\n').filter(line => line.trim());
       
