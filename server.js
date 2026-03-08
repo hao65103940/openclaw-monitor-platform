@@ -987,6 +987,126 @@ app.get('/api/analytics/channels', (req, res) => {
 });
 
 /**
+ * GET /api/analytics/channel-detail
+ * 渠道详细分析（增强版）
+ */
+app.get('/api/analytics/channel-detail', (req, res) => {
+  try {
+    const sessionsData = getSessionsData();
+    const sessions = sessionsData.sessions || [];
+    
+    const channelMap = new Map();
+    sessions.forEach(s => {
+      const channel = s.kind || 'direct';
+      if (!channelMap.has(channel)) {
+        channelMap.set(channel, {
+          channel,
+          count: 0,
+          totalTokens: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalRuntime: 0,
+          failedCount: 0,
+          models: new Map(),
+        });
+      }
+      const data = channelMap.get(channel);
+      data.count++;
+      data.totalTokens += s.totalTokens || 0;
+      data.inputTokens += s.inputTokens || 0;
+      data.outputTokens += s.outputTokens || 0;
+      data.totalRuntime += s.runtimeMs || 0;
+      if (s.status === 'failed') data.failedCount++;
+      
+      const model = s.model || 'unknown';
+      if (!data.models.has(model)) {
+        data.models.set(model, 0);
+      }
+      data.models.set(model, data.models.get(model) + 1);
+    });
+    
+    const channels = Array.from(channelMap.values()).map(c => ({
+      ...c,
+      avgTokens: c.count > 0 ? Math.round(c.totalTokens / c.count) : 0,
+      avgRuntime: c.count > 0 ? Math.round(c.totalRuntime / c.count) : 0,
+      failureRate: c.count > 0 ? Math.round((c.failedCount / c.count) * 1000) / 10 : 0,
+      models: Array.from(c.models.entries()).map(([model, count]) => ({ model, count })),
+    }));
+    
+    res.json({
+      success: true,
+      channels: channels.sort((a, b) => b.count - a.count),
+      totalChannels: channels.length,
+    });
+  } catch (error) {
+    console.error('渠道详细分析 API 错误:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/analytics/subagent-stats
+ * 子 Agent 统计
+ */
+app.get('/api/analytics/subagent-stats', (req, res) => {
+  try {
+    const sessionsData = getSessionsData();
+    const sessions = sessionsData.sessions || [];
+    
+    // 从 session key 中解析子 Agent（格式：agent:main:sub1）
+    const subAgentMap = new Map();
+    sessions.forEach(s => {
+      const keyParts = (s.key || '').split(':');
+      if (keyParts.length >= 3) {
+        const subAgentId = keyParts.slice(2).join(':');
+        if (!subAgentMap.has(subAgentId)) {
+          subAgentMap.set(subAgentId, {
+            id: subAgentId,
+            count: 0,
+            totalTokens: 0,
+            totalRuntime: 0,
+            failedCount: 0,
+            parentAgents: new Set(),
+          });
+        }
+        const data = subAgentMap.get(subAgentId);
+        data.count++;
+        data.totalTokens += s.totalTokens || 0;
+        data.totalRuntime += s.runtimeMs || 0;
+        if (s.status === 'failed') data.failedCount++;
+        data.parentAgents.add(keyParts[1] || 'main');
+      }
+    });
+    
+    const subAgents = Array.from(subAgentMap.values())
+      .map(s => ({
+        ...s,
+        avgTokens: s.count > 0 ? Math.round(s.totalTokens / s.count) : 0,
+        avgRuntime: s.count > 0 ? Math.round(s.totalRuntime / s.count) : 0,
+        failureRate: s.count > 0 ? Math.round((s.failedCount / s.count) * 1000) / 10 : 0,
+        parentAgents: Array.from(s.parentAgents),
+      }))
+      .sort((a, b) => b.count - a.count);
+    
+    res.json({
+      success: true,
+      subAgents,
+      totalSubAgents: subAgents.length,
+      totalSessions: sessions.length,
+    });
+  } catch (error) {
+    console.error('子 Agent 统计 API 错误:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
  * GET /api/trace/subagents
  * 子 Agent 链路
  */

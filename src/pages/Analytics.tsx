@@ -7,6 +7,8 @@ import FailureAnalysis from '../components/FailureAnalysis';
 import ModelStats from '../components/ModelStats';
 import PerformanceBottleneck from '../components/PerformanceBottleneck';
 import ToolUsage from '../components/ToolUsage';
+import ChannelDetail from '../components/ChannelDetail';
+import SubAgentStats from '../components/SubAgentStats';
 
 function Analytics() {
   return (
@@ -36,6 +38,11 @@ function Analytics() {
         <PerformanceBottleneck />
         <ToolUsage />
       </div>
+
+      {/* 阶段 4：渠道与子 Agent 分析 */}
+      <ChannelDetail />
+      
+      <SubAgentStats />
     </div>
   );
 }
