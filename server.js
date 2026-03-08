@@ -104,6 +104,88 @@ function runOpenClawCommand(command) {
 }
 
 /**
+ * 从所有 Agent 目录读取会话数据（从 JSONL 文件最后一行）
+ */
+function getAllAgentsSessions() {
+  const agentsPath = OPENCLAW.agentsPath;
+  const allSessions = [];
+  
+  try {
+    // 读取所有 Agent 目录
+    const agentDirs = fs.readdirSync(agentsPath, { withFileTypes: true })
+      .filter(dirent => dirent.isDirectory() && !dirent.name.startsWith('.'))
+      .map(dirent => dirent.name);
+    
+    // 遍历每个 Agent
+    agentDirs.forEach(agentId => {
+      const agentSessionsPath = path.join(agentsPath, agentId, 'sessions');
+      
+      if (fs.existsSync(agentSessionsPath)) {
+        try {
+          // 读取所有 JSONL 文件
+          const files = fs.readdirSync(agentSessionsPath)
+            .filter(f => f.endsWith('.jsonl'));
+          
+          files.forEach(file => {
+            const filePath = path.join(agentSessionsPath, file);
+            const stats = fs.statSync(filePath);
+            const sessionId = file.replace('.jsonl', '');
+            
+            // 从 JSONL 文件最后一行读取最终统计（包含 tokenUsage）
+            try {
+              const lastLine = execSync(`tail -1 "${filePath}"`, { encoding: 'utf-8' });
+              const lastEntry = JSON.parse(lastLine);
+              
+              // 提取会话类型（从 sessionKey 或 cwd）
+              let sessionType = 'direct';
+              if (lastEntry.sessionKey) {
+                // agent:main:feishu:group:xxx → feishu:group
+                const parts = lastEntry.sessionKey.split(':');
+                if (parts.length > 2) {
+                  sessionType = parts.slice(2, 4).join(':');
+                }
+              } else if (lastEntry.cwd && lastEntry.cwd.includes('feishu-agent')) {
+                sessionType = 'feishu';
+              } else if (lastEntry.cwd && lastEntry.cwd.includes('wecom-agent')) {
+                sessionType = 'wecom';
+              }
+              
+              // 提取 Token 数据（从 message.usage 或根节点）
+              const usage = lastEntry.message?.usage || lastEntry.tokenUsage || {};
+              const totalTokens = usage.totalTokens || usage.total || 0;
+              const inputTokens = usage.input || usage.inputTokens || 0;
+              const outputTokens = usage.output || usage.outputTokens || 0;
+              
+              allSessions.push({
+                sessionId: sessionId,
+                key: `agent:${agentId}:${sessionType}:${sessionId}`,
+                agentId: agentId,
+                model: lastEntry.message?.model || lastEntry.model || 'qwen3.5-plus',
+                totalTokens: totalTokens,
+                inputTokens: inputTokens,
+                outputTokens: outputTokens,
+                updatedAt: stats.mtimeMs,
+                ageMs: stats.mtimeMs - (lastEntry.timestamp ? new Date(lastEntry.timestamp).getTime() : stats.mtimeMs),
+              });
+            } catch (error) {
+              log('debug', `[多 Agent] 读取 ${agentId}/${file} 元数据失败:`, error.message);
+            }
+          });
+        } catch (error) {
+          log('debug', `[多 Agent] 读取 ${agentId} 目录失败:`, error.message);
+        }
+      }
+    });
+    
+    log('info', `[多 Agent] 从 ${agentDirs.length} 个 Agent 读取 ${allSessions.length} 个会话`);
+  } catch (error) {
+    log('error', '[多 Agent] 读取所有 Agent 会话失败:', error.message);
+  }
+  
+  return allSessions;
+}
+
+/**
  * 获取会话数据（带缓存 + 数据验证）
  */
 function getSessionsData() {
@@ -113,22 +195,21 @@ function getSessionsData() {
     return sessionsCache;
   }
   
-  // 缓存失效，重新获取
-  const sessionsData = runOpenClawCommand('openclaw sessions --json');
+  // 从所有 Agent 目录读取会话数据
+  const allSessions = getAllAgentsSessions();
   
   // 数据验证：过滤无效会话
-  if (sessionsData.sessions && Array.isArray(sessionsData.sessions)) {
-    const validSessions = sessionsData.sessions.filter(validateSessionData);
-    const invalidCount = sessionsData.sessions.length - validSessions.length;
-    
-    if (invalidCount > 0) {
-      log('warn', `[数据验证] 过滤 ${invalidCount} 个无效会话`);
-    }
-    
-    sessionsCache = { ...sessionsData, sessions: validSessions };
-  } else {
-    sessionsCache = sessionsData;
+  const validSessions = allSessions.filter(validateSessionData);
+  const invalidCount = allSessions.length - validSessions.length;
+  
+  if (invalidCount > 0) {
+    log('warn', `[数据验证] 过滤 ${invalidCount} 个无效会话`);
   }
+  
+  sessionsCache = {
+    sessions: validSessions,
+    count: validSessions.length,
+  };
   
   cacheTimestamp = now;
   return sessionsCache;
@@ -141,11 +222,27 @@ function formatAgent(session, label) {
   const createdAt = session.updatedAt - (session.ageMs || 0);
   const updatedAt = session.updatedAt;
   
+  // 从 sessionKey 解析 agentId
+  // 格式：agent:{agentId}:{sessionType}:{sessionId}
+  // 例如：agent:main:main, agent:feishu-agent:group:xxx
+  const sessionKey = session.key || session.sessionKey || '';
+  let agentId = 'main'; // 默认主 Agent
+  
+  if (sessionKey.startsWith('agent:')) {
+    const parts = sessionKey.split(':');
+    if (parts.length >= 2) {
+      agentId = parts[1]; // 提取 agentId
+    }
+  }
+  
+  // 去重：使用 sessionId 作为唯一 ID（避免同一会话不同 sessionKey 导致重复）
+  const uniqueId = session.sessionId || session.key || `agent:unknown`;
+  
   return {
-    id: session.sessionId || session.sessionKey || session.key || `agent:unknown`,  // 优先使用 UUID 格式的 sessionId
-    sessionId: session.sessionId || session.key,  // 添加 sessionId 字段
-    sessionKey: session.key || session.sessionKey,  // 添加 sessionKey 字段
-    agentId: 'agent:main',
+    id: uniqueId,
+    sessionId: session.sessionId || session.key,
+    sessionKey: session.key || session.sessionKey,
+    agentId: `agent:${agentId}`, // 添加前缀匹配前端配置
     status: 'done', // 存储的会话都是已完成的
     task: label || '未知任务',
     label: label || '会话',
@@ -196,14 +293,24 @@ app.get('/api/subagents/list', (req, res) => {
     const sessionsData = getSessionsData();
     const sessions = sessionsData.sessions || [];
     
+    // 去重：按 sessionId 去重（保留最新的）
+    const uniqueSessionsMap = new Map();
+    sessions.forEach(session => {
+      const sessionId = session.sessionId || session.key;
+      if (!uniqueSessionsMap.has(sessionId) || session.updatedAt > uniqueSessionsMap.get(sessionId).updatedAt) {
+        uniqueSessionsMap.set(sessionId, session);
+      }
+    });
+    const uniqueSessions = Array.from(uniqueSessionsMap.values());
+    
     // 限制最近 20 条
-    const recent = sessions.slice(0, 20).map((s, i) => 
+    const recent = uniqueSessions.slice(0, 20).map((s, i) => 
       formatAgent(s, s.key || `会话-${i + 1}`)
     );
     
     // 活跃 Agent（最近 5 分钟内更新的）
     const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-    const active = sessions
+    const active = uniqueSessions
       .filter(s => s.updatedAt > fiveMinAgo)
       .map((s, i) => ({
         ...formatAgent(s, s.key || `会话-${i + 1}`),
@@ -233,20 +340,30 @@ app.get('/api/sessions/list', (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const sessionsData = getSessionsData();
     // CLI 返回格式：{sessions: [...], count: N, path: '...'}
-    const sessions = (sessionsData.sessions || []).slice(0, limit);
+    const sessions = sessionsData.sessions || [];
+    
+    // 去重：按 sessionId 去重（保留最新的）
+    const uniqueSessionsMap = new Map();
+    sessions.forEach(session => {
+      const sessionId = session.sessionId || session.key;
+      if (!uniqueSessionsMap.has(sessionId) || session.updatedAt > uniqueSessionsMap.get(sessionId).updatedAt) {
+        uniqueSessionsMap.set(sessionId, session);
+      }
+    });
+    const uniqueSessions = Array.from(uniqueSessionsMap.values()).slice(0, limit);
     
     res.json({
-      sessions: sessions.map(s => ({
-        id: s.sessionId || s.key,  // 添加 id 字段，前端 Agent 类型需要
+      sessions: uniqueSessions.map(s => ({
+        id: s.sessionId || s.key,
         sessionId: s.sessionId || s.key,
         sessionKey: s.key,
-        label: s.key || '未知会话',
+        label: s.key || `${s.agentId}:${s.sessionId}`,
         createdAt: s.updatedAt - (s.ageMs || 0),
         updatedAt: s.updatedAt,
-        messageCount: 0, // OpenClaw 不提供
+        messageCount: 0,
         agentId: s.agentId || 'main',
         model: s.model,
-        status: 'done', // 历史会话都是已完成的
+        status: 'done',
         tokens: s.totalTokens || 0,
         totalTokens: s.totalTokens || 0,
         inputTokens: s.inputTokens || 0,
@@ -254,7 +371,7 @@ app.get('/api/sessions/list', (req, res) => {
         contextTokens: s.contextTokens || 0,
         kind: s.kind || 'direct',
       })),
-      total: sessions.length,
+      total: uniqueSessions.length,
     });
   } catch (error) {
     log('error', '[API] 获取会话列表失败:', error.message);
