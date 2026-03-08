@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
-import { getApiUrl } from '../services/api';
+import * as echarts from 'echarts/core';
 
 interface TokenSession {
   id: string;
@@ -35,7 +35,7 @@ export default function TokenTrend() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${getApiUrl()}/api/analytics/token-trends`);
+      const response = await fetch('/api/analytics/token-trends');
       const result = await response.json();
       
       if (result.success) {
