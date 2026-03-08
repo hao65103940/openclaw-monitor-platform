@@ -1,6 +1,9 @@
 import TokenHistory from '../components/TokenHistory';
 import TokenEfficiency from '../components/TokenEfficiency';
 import CostEstimate from '../components/CostEstimate';
+import SessionLifecycle from '../components/SessionLifecycle';
+import SessionTypes from '../components/SessionTypes';
+import FailureAnalysis from '../components/FailureAnalysis';
 
 function Analytics() {
   return (
@@ -13,6 +16,14 @@ function Analytics() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <TokenEfficiency />
         <CostEstimate />
+      </div>
+
+      {/* 阶段 2：会话行为分析 */}
+      <SessionLifecycle />
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SessionTypes />
+        <FailureAnalysis />
       </div>
     </div>
   );

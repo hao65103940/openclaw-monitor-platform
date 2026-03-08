@@ -698,6 +698,139 @@ app.get('/api/analytics/cost-estimate', (req, res) => {
 });
 
 /**
+ * GET /api/analytics/session-lifecycle
+ * 会话生命周期分析
+ */
+app.get('/api/analytics/session-lifecycle', (req, res) => {
+  try {
+    const sessionsData = getSessionsData();
+    const sessions = sessionsData.sessions || [];
+    
+    const now = Date.now();
+    const activeSessions = sessions.filter(s => s.status === 'running');
+    const completedSessions = sessions.filter(s => s.status === 'done');
+    const failedSessions = sessions.filter(s => s.status === 'failed');
+    
+    const avgRuntime = sessions.length > 0
+      ? Math.round(sessions.reduce((sum, s) => sum + (s.runtimeMs || 0), 0) / sessions.length)
+      : 0;
+    
+    const completionRate = sessions.length > 0
+      ? Math.round((completedSessions.length / sessions.length) * 100)
+      : 0;
+    
+    // 活跃时段分析（按小时统计）
+    const hourDistribution = new Array(24).fill(0);
+    sessions.forEach(s => {
+      const hour = new Date(s.updatedAt).getHours();
+      hourDistribution[hour]++;
+    });
+    
+    res.json({
+      success: true,
+      totalSessions: sessions.length,
+      activeSessions: activeSessions.length,
+      completedSessions: completedSessions.length,
+      failedSessions: failedSessions.length,
+      completionRate,
+      avgRuntime,
+      hourDistribution,
+    });
+  } catch (error) {
+    console.error('会话生命周期 API 错误:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/analytics/session-types
+ * 会话类型分布
+ */
+app.get('/api/analytics/session-types', (req, res) => {
+  try {
+    const sessionsData = getSessionsData();
+    const sessions = sessionsData.sessions || [];
+    
+    // 按类型分组
+    const typeMap = new Map();
+    sessions.forEach(s => {
+      const type = s.kind || 'direct';
+      if (!typeMap.has(type)) {
+        typeMap.set(type, { type, count: 0, totalTokens: 0, totalRuntime: 0 });
+      }
+      const data = typeMap.get(type);
+      data.count += 1;
+      data.totalTokens += s.totalTokens || 0;
+      data.totalRuntime += s.runtimeMs || 0;
+    });
+    
+    const types = Array.from(typeMap.values())
+      .map(t => ({
+        ...t,
+        avgTokens: t.count > 0 ? Math.round(t.totalTokens / t.count) : 0,
+        avgRuntime: t.count > 0 ? Math.round(t.totalRuntime / t.count) : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+    
+    res.json({
+      success: true,
+      types,
+      totalSessions: sessions.length,
+    });
+  } catch (error) {
+    console.error('会话类型 API 错误:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/analytics/failure-analysis
+ * 失败会话分析
+ */
+app.get('/api/analytics/failure-analysis', (req, res) => {
+  try {
+    const sessionsData = getSessionsData();
+    const sessions = sessionsData.sessions || [];
+    
+    const failedSessions = sessions.filter(s => s.status === 'failed');
+    const failureRate = sessions.length > 0
+      ? Math.round((failedSessions.length / sessions.length) * 1000) / 10 // 保留一位小数
+      : 0;
+    
+    // 按失败时间排序
+    const recentFailures = failedSessions
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .slice(0, 10)
+      .map(s => ({
+        id: s.id,
+        label: s.key || s.sessionId || '未知',
+        updatedAt: s.updatedAt,
+        runtimeMs: s.runtimeMs || 0,
+        totalTokens: s.totalTokens || 0,
+      }));
+    
+    res.json({
+      success: true,
+      failureRate,
+      totalFailures: failedSessions.length,
+      recentFailures,
+    });
+  } catch (error) {
+    console.error('失败分析 API 错误:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
  * GET /api/analytics/channels
  * 渠道统计
  */
