@@ -548,7 +548,7 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
               )}
             </div>
           ) : activeTab === 'messages' ? (
-            <div className="space-y-3 overflow-auto max-h-[60vh] p-4">
+            <div className="space-y-3 overflow-y-auto max-h-[60vh] p-4 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800 scrollbar-thumb-rounded-full hover:scrollbar-thumb-gray-500">
               {logs.filter(l => l.type === 'message').map((msg, index) => {
                 const isUser = msg.details?.role === 'user';
                 return (
@@ -557,21 +557,21 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
                     className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
                   >
                     <div 
-                      className={`max-w-[70%] p-3 rounded-lg ${
+                      className={`max-w-[70%] p-3 rounded-lg shadow-md ${
                         isUser 
-                          ? 'bg-blue-600 text-white rounded-br-none' 
-                          : 'bg-gray-700 text-gray-100 rounded-bl-none'
+                          ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-none' 
+                          : 'bg-gradient-to-br from-gray-700 to-gray-800 text-gray-100 rounded-bl-none'
                       }`}
                     >
                       <div className="flex items-center space-x-2 mb-1">
-                        <span className="text-xs opacity-75">
+                        <span className="text-xs opacity-80 font-medium">
                           {isUser ? '👤 你' : '🤖 Agent'}
                         </span>
                         <span className="text-xs opacity-50">
                           {dayjs(msg.timestamp).format('HH:mm:ss')}
                         </span>
                       </div>
-                      <p className="text-sm whitespace-pre-wrap break-all">
+                      <p className="text-sm whitespace-pre-wrap break-all leading-relaxed">
                         {msg.message}
                       </p>
                     </div>
@@ -583,6 +583,7 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
                   💬 暂无消息记录
                 </div>
               )}
+              <div ref={logsEndRef as any} />
             </div>
           ) : null}
         </div>
