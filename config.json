@@ -10,7 +10,7 @@
     "port": 3001,
     "host": "0.0.0.0",
     "cacheTTL": 5000,
-    "logPath": "/root/.openclaw/monitor-platform/logs"
+    "logPath": "/root/.openclaw/claweye/logs"
   },
   "frontend": {
     "devPort": 3000,
@@ -23,7 +23,7 @@
   },
   "github": {
     "username": "hao65103940",
-    "repository": "openclaw-monitor-platform",
+    "repository": "openclaw-claweye",
     "tokenNote": "Token stored in .env file (GITHUB_TOKEN) - DO NOT COMMIT .env"
   }
 }
