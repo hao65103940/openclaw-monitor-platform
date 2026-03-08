@@ -1,4 +1,4 @@
-[dotenv@17.3.1] injecting env (13) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[dotenv@17.3.1] injecting env (13) from .env -- tip: ⚙️  enable debug logging with { debug: true }
 ⚙️  配置信息:
    端口：3001
    OpenClaw 路径：/root/.openclaw
