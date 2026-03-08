@@ -484,17 +484,17 @@ function Trace() {
           {/* 执行流程图 - 垂直时间线 */}
           <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-700 bg-gray-850 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-white">📊 执行流程时间线</h3>
-            <p className="text-sm text-gray-400 mt-1">显示最近的 Agent 会话执行记录，点击查看详情</p>
-          </div>
-          {loadingStates.flow && (
-            <span className="text-sm text-blue-400 flex items-center space-x-2">
-              <span className="animate-spin">🔄</span>
-              <span>加载中...</span>
-            </span>
-          )}
-        </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">📊 执行流程时间线</h3>
+                <p className="text-sm text-gray-400 mt-1">显示最近的 Agent 会话执行记录，点击查看详情</p>
+              </div>
+              {loadingStates.flow && (
+                <span className="text-sm text-blue-400 flex items-center space-x-2">
+                  <span className="animate-spin">🔄</span>
+                  <span>加载中...</span>
+                </span>
+              )}
+            </div>
         
         <div className="p-6">
           {loadingStates.flow ? (
