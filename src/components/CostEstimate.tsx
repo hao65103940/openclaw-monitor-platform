@@ -93,7 +93,7 @@ export default function CostEstimate() {
       <div>
         <h4 className="text-sm font-semibold text-gray-300 mb-3">📊 模型成本分布</h4>
         <div className="space-y-3">
-          {data.modelCosts.map((item, index) => (
+          {data.modelCosts.map((item) => (
             <div key={item.model} className="bg-gray-700 rounded-lg p-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-gray-300">{item.model}</span>
