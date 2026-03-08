@@ -38,50 +38,44 @@ function Logs() {
     loadLogsList();
   }, []);
 
-  // 读取日志内容
-  useEffect(() => {
+  // 读取日志内容（使用 useMemo 优化）
+  const loadLogs = React.useCallback(async () => {
     if (isPaused) return;
-
-    async function loadLogs() {
-      setLoading(true);
-      try {
-        let response;
-        if (logSource === 'gateway') {
-          // Gateway 日志
-          response = await api.get('/gateway-logs', {
-            params: {
-              lines: linesCount,
-            },
-          });
-        } else {
-          // 文件日志
-          response = await api.get('/logs/read', {
-            params: {
-              file: selectedLog,
-              lines: linesCount,
-              filter: filterText,
-            },
-          });
-        }
-        
-        setLogLines(response.data.lines || []);
-        setLastFetchTime(Date.now());
-      } catch (error) {
-        console.error('加载日志失败:', error);
-        setLogLines(['❌ 加载失败：' + (error as Error).message]);
-      } finally {
-        setLoading(false);
+    
+    setLoading(true);
+    try {
+      let response;
+      if (logSource === 'gateway') {
+        response = await api.get('/gateway-logs', {
+          params: { lines: linesCount },
+          timeout: 5000,
+        });
+      } else {
+        response = await api.get('/logs/read', {
+          params: {
+            file: selectedLog,
+            lines: linesCount,
+            filter: filterText,
+          },
+          timeout: 5000,
+        });
       }
+      
+      setLogLines(response.data.lines || []);
+      setLastFetchTime(Date.now());
+    } catch (error) {
+      console.error('加载日志失败:', error);
+      setLogLines(['❌ 加载失败：' + (error as Error).message]);
+    } finally {
+      setLoading(false);
     }
-
-    // 立即加载一次
-    loadLogs();
-
-    // 定时刷新（每 2 秒）
-    const interval = setInterval(loadLogs, 2000);
-
-    return () => clearInterval(interval);
   }, [selectedLog, logSource, isPaused, filterText, linesCount]);
+
+  useEffect(() => {
+    loadLogs();
+    const interval = setInterval(loadLogs, 5000); // 优化：2 秒 → 5 秒
+    return () => clearInterval(interval);
+  }, [loadLogs]);
 
   // 自动滚动到底部（只在日志容器内滚动，不影响外部页面）
   useEffect(() => {

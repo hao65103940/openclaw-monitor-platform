@@ -41,7 +41,7 @@ function LogDetailModal({ agent, onClose }: LogDetailModalProps) {
       if (!isPaused) {
         loadHistory();
       }
-    }, 3000);
+    }, 10000); // 优化：3 秒 → 10 秒（会话历史不需要频繁刷新）
     
     return () => clearInterval(interval);
   }, [agent.id, isPaused]);

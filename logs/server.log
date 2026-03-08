@@ -1,4 +1,4 @@
-[dotenv@17.3.1] injecting env (12) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (12) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
 📋 已加载配置文件：config.json
 ⚙️  配置信息:
    端口：3001
@@ -14,5 +14,3 @@
    GET /api/health         - 健康检查
 💡 当前使用 **真实数据** (OpenClaw CLI)
 🌐 可从外部访问（需要防火墙开放端口）
-[API] 请求会话历史：agent:main:main
-[API] 返回会话历史：257 条消息，140 个工具调用

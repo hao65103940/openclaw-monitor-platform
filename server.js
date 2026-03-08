@@ -33,7 +33,9 @@ if (fs.existsSync(configPath)) {
 // 从环境变量或配置文件读取配置
 const PORT = parseInt(process.env.PORT || appConfig.server?.port || '3001');
 const HOST = process.env.HOST || appConfig.server?.host || '0.0.0.0';
-const CACHE_TTL = parseInt(process.env.CACHE_TTL || appConfig.server?.cacheTTL || '5000');
+const CACHE_TTL = parseInt(process.env.CACHE_TTL || appConfig.server?.cacheTTL || '10000'); // 优化：5s → 10s
+const STATS_CACHE_TTL = 30000; // 统计数据 30 秒缓存
+const SESSIONS_CACHE_TTL = 15000; // 会话列表 15 秒缓存
 
 // OpenClaw 路径配置
 const OPENCLAW = {
@@ -95,7 +97,7 @@ function runOpenClawCommand(command) {
 function getSessionsData() {
   const now = Date.now();
   // 检查缓存是否有效
-  if (sessionsCache && (now - cacheTimestamp) < CACHE_TTL) {
+  if (sessionsCache && (now - cacheTimestamp) < SESSIONS_CACHE_TTL) {
     return sessionsCache;
   }
   
@@ -223,10 +225,19 @@ app.get('/api/sessions/list', (req, res) => {
 
 /**
  * GET /api/stats
- * 获取统计数据
+ * 获取统计数据（带缓存优化）
  */
+let statsCache = null;
+let statsCacheTime = 0;
+
 app.get('/api/stats', (req, res) => {
   try {
+    const now = Date.now();
+    // 检查缓存
+    if (statsCache && (now - statsCacheTime) < STATS_CACHE_TTL) {
+      return res.json(statsCache);
+    }
+    
     const sessionsData = getSessionsData();
     const sessions = sessionsData.sessions || [];
     
@@ -283,10 +294,20 @@ app.get('/api/health', (req, res) => {
 
 /**
  * GET /api/trace/flow
- * 执行流程追踪
+ * 执行流程追踪（带缓存）
  */
+let traceCache = null;
+let traceCacheTime = 0;
+const TRACE_CACHE_TTL = 20000; // 20 秒缓存
+
 app.get('/api/trace/flow', (req, res) => {
   try {
+    const now = Date.now();
+    // 检查缓存
+    if (traceCache && (now - traceCacheTime) < TRACE_CACHE_TTL) {
+      return res.json(traceCache);
+    }
+    
     const sessionsData = getSessionsData();
     const sessions = sessionsData.sessions || [];
     
@@ -307,7 +328,12 @@ app.get('/api/trace/flow', (req, res) => {
       isActive: s.updatedAt > fiveMinAgo,
     }));
     
-    res.json({ flow });
+    const result = { flow };
+    // 更新缓存
+    traceCache = result;
+    traceCacheTime = now;
+    
+    res.json(result);
   } catch (error) {
     console.error('[API] 获取执行流程失败:', error.message);
     res.status(500).json({ 
