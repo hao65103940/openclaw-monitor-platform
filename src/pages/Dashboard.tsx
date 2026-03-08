@@ -6,6 +6,7 @@ import 'dayjs/locale/zh-cn';
 import { useAgentStore } from '../store/useAgentStore';
 import type { Agent, Stats } from '../types';
 import LogDetailModal from '../components/LogDetailModal';
+import { io, Socket } from 'socket.io-client';
 
 dayjs.extend(duration);
 dayjs.extend(relativeTime);
@@ -356,6 +357,50 @@ function Dashboard() {
     }, 30000);
     return () => clearInterval(interval);
   }, [refreshAll, apiStopped]);
+
+  // WebSocket 实时会话状态更新
+  useEffect(() => {
+    const socket: Socket = io('http://localhost:3001', {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 10,
+    });
+
+    socket.on('connect', () => {
+      console.log('[WS] Dashboard 已连接');
+      // 订阅会话状态
+      socket.emit('subscribe:session-status');
+    });
+
+    // 接收初始会话状态
+    socket.on('session-status:initial', (data: { sessions: any[]; timestamp: number }) => {
+      console.log('[WS] 接收初始会话状态:', data.sessions.length, '个会话');
+      // 已经在 refreshAll 中加载了，这里可以跳过
+    });
+
+    // 接收会话状态更新
+    socket.on('session-status:update', (data: { sessions: any[]; timestamp: number }) => {
+      console.log('[WS] 接收会话状态更新:', data.sessions.length, '个会话');
+      // 触发刷新
+      if (!apiStopped) {
+        refreshAll();
+      }
+    });
+
+    socket.on('disconnect', () => {
+      console.log('[WS] Dashboard 已断开');
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('[WS] Dashboard 连接失败:', error.message);
+    });
+
+    return () => {
+      console.log('[WS] 清理 Dashboard 连接');
+      socket.disconnect();
+    };
+  }, [apiStopped, refreshAll]);
 
   const currentStats = stats || {
     activeAgents: 0,

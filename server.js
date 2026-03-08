@@ -1551,6 +1551,22 @@ io.on('connection', (socket) => {
     }
   });
   
+  // ========== 会话状态实时更新 ==========
+  socket.on('subscribe:session-status', () => {
+    console.log('[WS] 客户端订阅会话状态:', socket.id);
+    
+    // 发送当前会话列表
+    try {
+      const sessionsData = getSessionsData();
+      socket.emit('session-status:initial', {
+        sessions: sessionsData.sessions || [],
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      console.error('[WS] 发送初始会话状态失败:', error.message);
+    }
+  });
+  
   // 断开连接
   socket.on('disconnect', () => {
     console.log('[WS] 客户端断开:', socket.id);
@@ -1604,6 +1620,19 @@ app.post('/api/sessions/stop', async (req, res) => {
     });
   }
 });
+
+// 定时推送会话状态更新（30 秒）
+const sessionStatusInterval = setInterval(() => {
+  try {
+    const sessionsData = getSessionsData();
+    io.emit('session-status:update', {
+      sessions: sessionsData.sessions || [],
+      timestamp: Date.now(),
+    });
+  } catch (error) {
+    console.error('[WS] 推送会话状态更新失败:', error.message);
+  }
+}, 30000); // 30 秒推送一次
 
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Agent 监控平台 API 服务已启动`);
